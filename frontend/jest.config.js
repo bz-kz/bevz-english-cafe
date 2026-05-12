@@ -22,6 +22,9 @@ const customJestConfig = {
     '<rootDir>/.next/',
     '<rootDir>/node_modules/',
     '<rootDir>/e2e/',
+    // 実バックエンドを必要とする統合テストは jest.integration.config.js
+    // でのみ実行する（`npm run test:integration`）。
+    '<rootDir>/src/__tests__/integration/api.integration.test.ts',
   ],
   coverageThreshold: {
     global: {

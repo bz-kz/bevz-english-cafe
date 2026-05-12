@@ -44,6 +44,7 @@
     "@testing-library/react": "^14.1.2",
     "@testing-library/user-event": "^14.5.1",
     "@types/dompurify": "^3.0.5",
+    "@types/jest": "^29.5.14",
     "@types/node": "24.3.3",
     "@types/react": "^18.2.45",
     "@types/react-dom": "^18.2.18",
@@ -59,8 +60,7 @@
     "playwright": "^1.40.1",
     "prettier": "^3.1.1",
     "prettier-plugin-tailwindcss": "^0.5.9",
-    "typescript": "5.9.2",
-    "webpack-bundle-analyzer": "^4.10.1"
+    "typescript": "5.9.2"
   },
   "lint-staged": {
     "*.{js,jsx,ts,tsx}": [

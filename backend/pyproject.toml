@@ -35,6 +35,8 @@ dev = [
     "safety==2.3.5",
     "aiosqlite>=0.21.0",
     "alembic>=1.13.1",
+    "mypy>=1.10",
+    "sqlalchemy[mypy]>=2.0.23",
 ]
 
 [build-system]
@@ -53,6 +55,17 @@ ignore = ["E501"]
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy", "sqlalchemy.ext.mypy.plugin"]
+exclude = ["alembic/versions/", "tests/"]
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+module = ["aiosmtplib.*", "jose.*", "slowapi.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -48,7 +48,7 @@ npm run ci:local            # ./scripts/local-ci.sh
 npm run ci:act              # requires `npm run ci:setup-act` once
 ```
 
-Backend pytest is configured (in `pyproject.toml`) with `asyncio_mode=auto` and always runs with coverage — no extra flags needed.
+Backend pytest is configured (in `pyproject.toml`) with `asyncio_mode=auto` and always runs with coverage — no extra flags needed. Backend mypy is configured with `strict=true` on `app/domain` + `app/services` via `uv run mypy app/domain app/services` (broadened in Stage E4 to api+infrastructure).
 
 ## Architecture
 
@@ -66,32 +66,32 @@ api/schemas        →  domain/repositories (interfaces)
                    infrastructure/di/container  (composition root)
 ```
 
-Domain entities (`app/domain/entities/contact.py`) raise `DomainEvent`s; the `InMemoryEventBus` dispatches them to handlers registered in `infrastructure/event_handlers/`. The `Container` in `app/infrastructure/di/container.py` is the composition root, wired during `lifespan` in `app/main.py`.
+Domain entities (`app/domain/entities/contact.py`) raise `DomainEvent`s; the `InMemoryEventBus` dispatches them to handlers registered in `infrastructure/event_handlers/`. Domain enums live in `app/domain/enums/` (split from entities in Stage B5). The `Container` in `app/infrastructure/di/container.py` is the composition root and holds singletons (event_bus, email_service, handlers); session-scoped repositories are composed per-request in endpoint dependencies.
 
-**Known divergence**: `app/api/endpoints/contact.py` does NOT pull from the DI container — it builds `ContactService` inline inside `get_contact_service`. If you're adding endpoints, follow this same pattern for now (per-request wiring via FastAPI `Depends`) unless you're explicitly refactoring to use the container.
+`app/api/endpoints/contact.py:get_contact_service` resolves `EmailService` from `container.get(EmailService)` and constructs the per-request `SQLAlchemyContactRepository(session)` + `ContactService`. Add new endpoints with the same pattern.
 
-There is also a stub `app/repositories/` directory (empty `__init__.py`) — repositories live under `app/domain/repositories/` (interfaces) and `app/infrastructure/repositories/` (implementations). Don't put new files in `app/repositories/`.
+The `Container._setup_services` branches `MockEmailService` (dev/test or empty SMTP_USER) vs `SMTPEmailService` (production) based on `settings.environment`.
 
-### Backend — CORS and OPTIONS quirks
+### Backend — CORS
 
-`app/main.py` currently overrides the configured `cors_origins` with `allow_origins=["*"]` (with `allow_credentials=False`) for debugging, and registers a catch-all `@app.options("/{path:path}")` handler. Before tightening CORS, check whether the frontend is going through Next.js rewrites (`/api/*` proxied via `next.config.js`) or hitting the backend directly.
+`app/main.py` builds an `allowed_origins` list from `settings.cors_origins` env var plus localhost variants, and adds `allow_origin_regex=r"^https://[a-z0-9-]+\.vercel\.app$"` for Vercel preview URLs. `allow_credentials=True`. No catch-all OPTIONS handler — CORSMiddleware owns preflight.
 
 ### Frontend
 
 Standard Next.js 14 App Router layout under `frontend/src/app/`. Cross-cutting code:
 
-- `src/lib/api.ts` — axios instance, request/response interceptors, auth-token plumbing.
-- `src/stores/` — Zustand stores (`contactStore`, `notificationStore`).
+- `src/lib/api.ts` — axios instance, request/response interceptors, auth-token plumbing. Uses `NEXT_PUBLIC_API_URL`.
+- `src/stores/` — Zustand stores (`notificationStore`).
+- `src/schemas/contact.ts` — zod schema for form validation; mirrors `backend/app/api/schemas/contact.py` Pydantic (keep in sync manually).
 - `src/components/sections/` — page-level marketing sections composed in `app/page.tsx`.
-- `src/components/forms/ContactForm.tsx` — the only real form, posts to backend `/api/v1/contacts`.
+- `src/components/forms/ContactForm.tsx` — the only real form; validates via the zod schema, posts to backend `/api/v1/contacts`.
+- `src/data/teachers.ts` + `src/types/teacher.ts` — shared marketing data (consumed by `TeachersSection` and `TeachersGridSection`).
 
-`next.config.js` proxies `/api/:path*` → `${NEXT_PUBLIC_API_URL}/api/:path*`, so frontend code can call `/api/v1/contacts` and have it land on the FastAPI backend.
-
-**Watch**: `src/lib/api.ts` reads `NEXT_PUBLIC_API_BASE_URL`, but everywhere else (and `.env.example`, `docker-compose.yml`, `next.config.js`) uses `NEXT_PUBLIC_API_URL`. They are not the same variable. If you wire a new fetch path, prefer `NEXT_PUBLIC_API_URL` and the Next rewrite.
+`next.config.js` proxies `/api/:path*` → `${NEXT_PUBLIC_API_URL}/api/:path*`. `@next/bundle-analyzer` is wired via `ANALYZE=true npm run build`.
 
 ### Shared types
 
-`shared/types/contact.ts` defines the wire shape, but the backend's `LessonType` enum has *more* values than the shared TS union (e.g. `online`, `business`, `toeic`). Keep them in sync if you add a value, or the frontend will fail validation.
+`shared/types/contact.ts` is the wire shape. It has parity with the backend `LessonType` enum (7 values) and the frontend zod schema. If you add an enum value, update all four: backend Pydantic schema, backend domain enum, shared TS union, frontend zod schema. The `/sync-shared-types` slash command surfaces drifts.
 
 ## Conventions
 

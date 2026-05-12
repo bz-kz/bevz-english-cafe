@@ -1,0 +1,221 @@
+/**
+ * Performance Optimization CSS
+ * パフォーマンス最適化のためのCSS
+ */
+
+/* 低帯域幅時の最適化 */
+.low-bandwidth img {
+  filter: blur(0.5px);
+  transform: scale(0.95);
+}
+
+.low-bandwidth video {
+  display: none;
+}
+
+.low-bandwidth .animation {
+  animation: none !important;
+  transition: none !important;
+}
+
+/* Critical CSS - Above the fold content */
+.critical-content {
+  contain: layout style paint;
+}
+
+/* 遅延読み込み画像のプレースホルダー */
+.lazy-image {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: loading 1.5s infinite;
+}
+
+@keyframes loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* GPU加速の最適化 */
+.gpu-accelerated {
+  transform: translateZ(0);
+  will-change: transform;
+}
+
+/* スクロール最適化 */
+.scroll-optimized {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+/* フォントの最適化 */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/inter-v12-latin-regular.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/inter-v12-latin-600.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/inter-v12-latin-700.woff2') format('woff2');
+}
+
+/* レイアウトシフトの防止 */
+.aspect-ratio-container {
+  position: relative;
+  width: 100%;
+  height: 0;
+}
+
+.aspect-ratio-container.aspect-16-9 {
+  padding-bottom: 56.25%;
+}
+
+.aspect-ratio-container.aspect-4-3 {
+  padding-bottom: 75%;
+}
+
+.aspect-ratio-container.aspect-1-1 {
+  padding-bottom: 100%;
+}
+
+.aspect-ratio-content {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* 重要でないコンテンツの遅延表示 */
+.defer-render {
+  content-visibility: auto;
+  contain-intrinsic-size: 300px;
+}
+
+/* プリロード用のスタイル */
+.preload-hint::after {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: -1px;
+  width: 1px;
+  height: 1px;
+  background: transparent;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* モバイル最適化 */
+@media (max-width: 768px) {
+  .mobile-optimized {
+    contain: layout style paint;
+  }
+  
+  /* タッチ操作の最適化 */
+  .touch-optimized {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+  
+  /* モバイルでのアニメーション削減 */
+  @media (prefers-reduced-motion: reduce) {
+    .mobile-animation {
+      animation: none !important;
+      transition: none !important;
+    }
+  }
+}
+
+/* ダークモード対応 */
+@media (prefers-color-scheme: dark) {
+  .dark-mode-optimized {
+    color-scheme: dark;
+  }
+}
+
+/* 高コントラスト対応 */
+@media (prefers-contrast: high) {
+  .high-contrast {
+    filter: contrast(1.2);
+  }
+}
+
+/* 印刷最適化 */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  
+  .print-optimized {
+    color: black !important;
+    background: white !important;
+    box-shadow: none !important;
+  }
+}
+
+/* パフォーマンス監視用のスタイル */
+.performance-marker {
+  position: absolute;
+  top: -9999px;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+/* 遅延読み込み要素のフェードイン */
+.fade-in {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.6s ease, transform 0.6s ease;
+}
+
+.fade-in.loaded {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* スケルトンローダーのアニメーション */
+.skeleton {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: skeleton-loading 1.5s infinite;
+}
+
+@keyframes skeleton-loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* 重要なコンテンツの優先表示 */
+.priority-content {
+  contain: layout style;
+  content-visibility: visible;
+}
+
+/* 非重要コンテンツの遅延表示 */
+.non-priority-content {
+  content-visibility: auto;
+  contain-intrinsic-size: 200px;
+}

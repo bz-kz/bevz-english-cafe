@@ -1,0 +1,115 @@
+{
+  "name": "英会話カフェ",
+  "short_name": "英会話カフェ",
+  "description": "東京の英会話カフェで、ネイティブ講師と楽しく英会話を学びませんか？",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#3b82f6",
+  "orientation": "portrait-primary",
+  "categories": ["education", "lifestyle"],
+  "lang": "ja",
+  "dir": "ltr",
+  "icons": [
+    {
+      "src": "/images/icon-72x72.png",
+      "sizes": "72x72",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/images/icon-96x96.png",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/images/icon-128x128.png",
+      "sizes": "128x128",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/images/icon-144x144.png",
+      "sizes": "144x144",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/images/icon-152x152.png",
+      "sizes": "152x152",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/images/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/images/icon-384x384.png",
+      "sizes": "384x384",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/images/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable any"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/images/screenshot-mobile.png",
+      "sizes": "390x844",
+      "type": "image/png",
+      "form_factor": "narrow"
+    },
+    {
+      "src": "/images/screenshot-desktop.png",
+      "sizes": "1920x1080",
+      "type": "image/png",
+      "form_factor": "wide"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "講師一覧",
+      "short_name": "講師",
+      "description": "講師プロフィールを見る",
+      "url": "/instructors",
+      "icons": [
+        {
+          "src": "/images/shortcut-instructors.png",
+          "sizes": "96x96"
+        }
+      ]
+    },
+    {
+      "name": "レッスン情報",
+      "short_name": "レッスン",
+      "description": "レッスン詳細と料金を見る",
+      "url": "/lessons",
+      "icons": [
+        {
+          "src": "/images/shortcut-lessons.png",
+          "sizes": "96x96"
+        }
+      ]
+    },
+    {
+      "name": "お問い合わせ",
+      "short_name": "問い合わせ",
+      "description": "お問い合わせフォーム",
+      "url": "/contact",
+      "icons": [
+        {
+          "src": "/images/shortcut-contact.png",
+          "sizes": "96x96"
+        }
+      ]
+    }
+  ]
+}

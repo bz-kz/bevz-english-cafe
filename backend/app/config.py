@@ -1,4 +1,3 @@
-
 from pydantic import ConfigDict
 from pydantic_settings import BaseSettings
 
@@ -24,6 +23,8 @@ class Settings(BaseSettings):
     smtp_user: str = ""
     smtp_password: str = ""
     from_email: str = "info@english-cafe.com"
+    # 管理者宛通知メール送信先（本番では Render 環境変数で必ず上書きすること）
+    admin_email: str = ""
 
     # 外部API設定
     youtube_api_key: str = ""
@@ -40,10 +41,7 @@ class Settings(BaseSettings):
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
 
-    model_config = ConfigDict(
-        env_file=".env",
-        case_sensitive=False
-    )
+    model_config = ConfigDict(env_file=".env", case_sensitive=False)
 
 
 # グローバル設定インスタンス

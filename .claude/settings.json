@@ -77,7 +77,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "branch=$(git -C \"$CLAUDE_PROJECT_DIR\" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown); be_count=$(grep -cE \"^\\s*(GROUP|PRIVATE|ONLINE|TRIAL|BUSINESS|TOEIC|OTHER)\\s*=\" \"$CLAUDE_PROJECT_DIR/backend/app/domain/entities/contact.py\" 2>/dev/null || echo ?); fe_count=$(grep -cE \"'(group|private|online|trial|business|toeic|other)'\" \"$CLAUDE_PROJECT_DIR/shared/types/contact.ts\" 2>/dev/null || echo ?); printf 'repo: kz-bz-english2 | branch: %s | LessonType drift backend:%s vs shared:%s | uv for backend (pip forbidden)\\n' \"$branch\" \"$be_count\" \"$fe_count\""
+            "command": "branch=$(git -C \"$CLAUDE_PROJECT_DIR\" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown); enum_path=\"$CLAUDE_PROJECT_DIR/backend/app/domain/enums/contact.py\"; [ -f \"$enum_path\" ] || enum_path=\"$CLAUDE_PROJECT_DIR/backend/app/domain/entities/contact.py\"; be_count=$(grep -cE \"^\\s*(GROUP|PRIVATE|ONLINE|TRIAL|BUSINESS|TOEIC|OTHER)\\s*=\" \"$enum_path\" 2>/dev/null || echo ?); fe_count=$(grep -cE \"'(group|private|online|trial|business|toeic|other)'\" \"$CLAUDE_PROJECT_DIR/shared/types/contact.ts\" 2>/dev/null || echo ?); printf 'repo: kz-bz-english2 | branch: %s | LessonType backend:%s vs shared:%s | uv for backend (pip forbidden)\\n' \"$branch\" \"$be_count\" \"$fe_count\""
           }
         ]
       }

@@ -9,8 +9,6 @@ from typing import TypeVar
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...config import get_settings
-from ...domain.repositories.contact_repository import ContactRepository
-from ...services.contact_service import ContactService
 from ...services.email_service import EmailService, MockEmailService, SMTPEmailService
 from ..event_bus.event_bus import EventBus
 from ..event_bus.in_memory_event_bus import InMemoryEventBus
@@ -137,17 +135,9 @@ class Container:
         """
         return service_type in self._services
 
-    def contact_service(self) -> ContactService:
-        """ContactServiceを取得"""
-        return self.get(ContactService)
-
     def email_service(self) -> EmailService:
         """EmailServiceを取得"""
         return self.get(EmailService)
-
-    def contact_repository(self) -> ContactRepository:
-        """ContactRepositoryを取得"""
-        return self.get(ContactRepository)
 
 
 # グローバルコンテナインスタンス

@@ -69,5 +69,51 @@
     "PYTHONDONTWRITEBYTECODE": "1",
     "NEXT_TELEMETRY_DISABLED": "1",
     "RUFF_NO_UPDATE_CHECK": "1"
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "branch=$(git -C \"$CLAUDE_PROJECT_DIR\" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown); be_count=$(grep -cE \"^\\s*(GROUP|PRIVATE|ONLINE|TRIAL|BUSINESS|TOEIC|OTHER)\\s*=\" \"$CLAUDE_PROJECT_DIR/backend/app/domain/entities/contact.py\" 2>/dev/null || echo ?); fe_count=$(grep -cE \"'(group|private|online|trial|business|toeic|other)'\" \"$CLAUDE_PROJECT_DIR/shared/types/contact.ts\" 2>/dev/null || echo ?); printf 'repo: kz-bz-english2 | branch: %s | LessonType drift backend:%s vs shared:%s | uv for backend (pip forbidden)\\n' \"$branch\" \"$be_count\" \"$fe_count\""
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cmd=$(jq -r '.tool_input.command // \"\"' 2>/dev/null); first=$(printf '%s' \"$cmd\" | awk '{print $1, $2; exit}'); case \"$first\" in 'git commit'*|'git tag'*|'git log'*|'git show'*) exit 0 ;; esac; if printf '%s' \"$cmd\" | grep -qE '(^|[;&|]|&&|\\|\\|)[[:space:]]*(pip|pip3)[[:space:]]+(install|uninstall)'; then printf '{\"decision\":\"block\",\"reason\":\"Use uv (uv add / uv sync) instead of pip per CLAUDE.md\"}'; exit 0; fi; if printf '%s' \"$cmd\" | grep -qE '(^|[;&|]|&&|\\|\\|)[[:space:]]*find[[:space:]]+/[^[:space:]/]'; then printf '{\"decision\":\"block\",\"reason\":\"find must be rooted at ./ not / — scanning the whole disk is wasteful\"}'; exit 0; fi; if printf '%s' \"$cmd\" | grep -qE '(^|[;&|]|&&|\\|\\|)[[:space:]]*(black|flake8|isort)([[:space:]]|$)'; then printf '{\"decision\":\"block\",\"reason\":\"ruff covers Black/isort/flake8 — do not run them separately\"}'; exit 0; fi; exit 0"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "p=$(jq -r '.tool_input.file_path // empty' 2>/dev/null); case \"$p\" in *.py) (cd \"$CLAUDE_PROJECT_DIR/backend\" && uv run ruff format \"$p\" >/dev/null 2>&1; uv run ruff check --fix \"$p\" >/dev/null 2>&1) || true ;; *.ts|*.tsx|*.js|*.jsx|*.json) (cd \"$CLAUDE_PROJECT_DIR\" && npx --no-install prettier --write \"$p\" >/dev/null 2>&1) || true ;; esac; exit 0"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "printf 'Before claiming done: npm run ci:local (or /verify)\\n'"
+          }
+        ]
+      }
+    ]
   }
 }

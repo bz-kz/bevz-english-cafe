@@ -29,7 +29,7 @@ export class Contact {
     public readonly email: string,
     public readonly message: string,
     public readonly phone?: string,
-    public readonly lessonType?: 'group' | 'private' | 'trial' | 'other',
+    public readonly lessonType?: 'group' | 'private' | 'online' | 'trial' | 'business' | 'toeic' | 'other',
     public readonly preferredContact: 'email' | 'phone' | 'line' | 'facebook' | 'instagram' = 'email'
   ) {
     this.validate();
@@ -109,6 +109,6 @@ export interface ContactFormData {
   email: string;
   message: string;
   phone?: string;
-  lessonType?: 'group' | 'private' | 'trial' | 'other';
+  lessonType?: 'group' | 'private' | 'online' | 'trial' | 'business' | 'toeic' | 'other';
   preferredContact?: 'email' | 'phone' | 'line' | 'facebook' | 'instagram';
 }

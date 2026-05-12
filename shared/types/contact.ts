@@ -5,7 +5,14 @@ export interface ContactFormData {
   email: string;
   phone?: string;
   message: string;
-  lessonType?: 'group' | 'private' | 'trial' | 'other';
+  lessonType?:
+    | 'group'
+    | 'private'
+    | 'online'
+    | 'trial'
+    | 'business'
+    | 'toeic'
+    | 'other';
   preferredContact: 'email' | 'phone' | 'line' | 'facebook' | 'instagram';
 }
 

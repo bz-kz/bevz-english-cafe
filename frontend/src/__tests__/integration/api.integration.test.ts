@@ -7,7 +7,7 @@ import { contactApi } from '@/lib/api';
 import { ContactFormData } from '@/lib/api';
 
 // テスト用のモックサーバーURL
-const TEST_API_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+const TEST_API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 describe('API Integration Tests', () => {
   beforeAll(() => {
@@ -65,13 +65,13 @@ describe('API Integration Tests', () => {
 
     it('should handle network errors gracefully', async () => {
       // 無効なURLでテスト
-      const originalUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
-      process.env.NEXT_PUBLIC_API_BASE_URL = 'http://invalid-url:9999';
+      const originalUrl = process.env.NEXT_PUBLIC_API_URL;
+      process.env.NEXT_PUBLIC_API_URL = 'http://invalid-url:9999';
 
       await expect(contactApi.submit(validContactData)).rejects.toThrow();
 
       // 元のURLに戻す
-      process.env.NEXT_PUBLIC_API_BASE_URL = originalUrl;
+      process.env.NEXT_PUBLIC_API_URL = originalUrl;
     });
   });
 

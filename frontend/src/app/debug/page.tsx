@@ -147,8 +147,8 @@ export default function DebugPage() {
                 <span className="text-gray-900">{process.env.NODE_ENV}</span>
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <span className="text-gray-600">NEXT_PUBLIC_API_BASE_URL:</span>
-                <span className="text-gray-900">{process.env.NEXT_PUBLIC_API_BASE_URL || 'undefined'}</span>
+                <span className="text-gray-600">NEXT_PUBLIC_API_URL:</span>
+                <span className="text-gray-900">{process.env.NEXT_PUBLIC_API_URL || 'undefined'}</span>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <span className="text-gray-600">現在のURL:</span>
@@ -184,7 +184,7 @@ export default function DebugPage() {
                 <h3 className="font-medium text-gray-800">API接続エラーの場合:</h3>
                 <ul className="list-disc list-inside text-gray-600 mt-1 space-y-1">
                   <li>バックエンドサーバーが起動しているか確認</li>
-                  <li>環境変数 NEXT_PUBLIC_API_BASE_URL が正しく設定されているか確認</li>
+                  <li>環境変数 NEXT_PUBLIC_API_URL が正しく設定されているか確認</li>
                   <li>CORS設定が正しく設定されているか確認</li>
                   <li>ファイアウォールやプロキシの設定を確認</li>
                 </ul>

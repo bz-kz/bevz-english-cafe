@@ -48,7 +48,7 @@ npm run test:integration:ci
 ## テスト設定
 
 ### 環境変数
-- `NEXT_PUBLIC_API_BASE_URL`: APIサーバーのURL（デフォルト: http://localhost:8000）
+- `NEXT_PUBLIC_API_URL`: APIサーバーのURL（デフォルト: http://localhost:8000）
 
 ### タイムアウト
 - 統合テストのタイムアウトは10秒に設定されています

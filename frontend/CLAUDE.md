@@ -15,7 +15,7 @@ Next.js 14 App Router + TypeScript + Tailwind + Zustand. See `../CLAUDE.md` for 
 
 ## 環境変数の罠
 
-`NEXT_PUBLIC_API_URL` が正規名。`NEXT_PUBLIC_API_BASE_URL` は使わない。`next.config.js` rewrite, jest.env.setup, debug ページ等は全部この名前。
+`NEXT_PUBLIC_API_URL` が正規名。`next.config.js` rewrite, jest.env.setup, debug ページ等は全部この名前。
 
 ## バリデーション
 

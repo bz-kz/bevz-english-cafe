@@ -15,7 +15,7 @@ interface ContactFormData {
   name: string;
   email: string;
   phone: string;
-  lessonType: 'group' | 'private' | 'trial' | 'other' | '';
+  lessonType: 'group' | 'private' | 'online' | 'trial' | 'business' | 'toeic' | 'other' | '';
   preferredContact: 'email' | 'phone' | 'line' | 'facebook' | 'instagram';
   message: string;
 }

@@ -9,7 +9,6 @@ from sqlalchemy.pool import StaticPool
 
 from app.infrastructure.database.connection import get_async_session
 from app.infrastructure.database.models.base import Base
-from app.infrastructure.di.container import get_container
 from app.main import app as main_app
 
 
@@ -28,9 +27,6 @@ async def app(async_session: AsyncSession) -> AsyncGenerator[FastAPI, None]:
     エンドポイントは ``Depends(get_async_session)`` 経由で本番 DB に接続するため、
     テスト用 SQLite セッションを返す override を差し込む。
     """
-    # DIコンテナの互換 API（現在は no-op）
-    container = get_container()
-    await container.setup_database_services(async_session)
 
     async def _override_get_async_session():
         yield async_session

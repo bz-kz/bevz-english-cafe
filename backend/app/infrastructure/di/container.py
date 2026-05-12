@@ -6,8 +6,6 @@ DIコンテナ
 
 from typing import TypeVar
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from ...config import get_settings
 from ...services.email_service import EmailService, MockEmailService, SMTPEmailService
 from ..event_bus.event_bus import EventBus
@@ -59,19 +57,6 @@ class Container:
 
         # イベントハンドラーの登録（email_service を必要とするため後に登録）
         self._register_event_handlers(event_bus, email_service)
-
-    async def setup_database_services(self, session: AsyncSession) -> None:
-        """
-        非推奨: DB セッションを必要とするリポジトリ／サービスは
-        endpoint 側で per-request に組み立てる方針に変更されました。
-
-        後方互換のため残しているが何もしない。新規コードでは呼ばないこと。
-
-        Args:
-            session: 後方互換のための未使用引数
-        """
-        # 互換用 no-op
-        return None
 
     def _register_event_handlers(
         self, event_bus: EventBus, email_service: EmailService

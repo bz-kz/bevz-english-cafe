@@ -29,7 +29,7 @@ class Contact:
 
     # 基本情報
     name: str = field(default="")
-    email: Email = field(default=None)
+    email: Optional[Email] = field(default=None)
     phone: Optional[Phone] = field(default=None)
     message: str = field(default="")
 
@@ -52,7 +52,7 @@ class Contact:
     # ドメインイベント
     _domain_events: list[DomainEvent] = field(default_factory=list, init=False)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """初期化後の処理"""
         if not self.name:
             raise ValueError("名前は必須です")
@@ -190,7 +190,7 @@ class Contact:
             phone: 新しい電話番号
             message: 新しいメッセージ
         """
-        updated_fields = {}
+        updated_fields: dict[str, dict[str, Optional[str]]] = {}
 
         if name is not None and name != self.name:
             updated_fields["name"] = {"old": self.name, "new": name}

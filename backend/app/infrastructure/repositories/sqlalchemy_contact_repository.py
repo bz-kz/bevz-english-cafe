@@ -1,12 +1,13 @@
 """SQLAlchemy implementation of Contact repository."""
 
-from typing import List, Optional
+from typing import Optional
 from uuid import UUID
 
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...domain.entities.contact import Contact
+from ...domain.enums.contact import ContactStatus, LessonType, PreferredContact
 from ...domain.repositories.contact_repository import ContactRepository
 from ...domain.value_objects.email import Email
 from ...domain.value_objects.phone import Phone
@@ -18,7 +19,7 @@ class SQLAlchemyContactRepository(ContactRepository):
 
     def __init__(self, session: AsyncSession):
         """Initialize repository with database session.
-        
+
         Args:
             session: SQLAlchemy async session
         """
@@ -26,16 +27,16 @@ class SQLAlchemyContactRepository(ContactRepository):
 
     async def save(self, contact: Contact) -> Contact:
         """Save a contact entity to database.
-        
+
         Args:
             contact: The contact entity to save
-            
+
         Returns:
             The saved contact entity with updated fields
         """
         # Check if contact already exists
         existing = await self._session.get(ContactModel, contact.id)
-        
+
         if existing:
             # Update existing contact
             existing.name = contact.name
@@ -59,10 +60,10 @@ class SQLAlchemyContactRepository(ContactRepository):
                 preferred_contact=contact.preferred_contact.value,
                 status=contact.status.value,
                 created_at=contact.created_at,
-                updated_at=contact.updated_at
+                updated_at=contact.updated_at,
             )
             self._session.add(contact_model)
-        
+
         await self._session.flush()
         await self._session.refresh(contact_model)
         return self._model_to_entity(contact_model)
@@ -79,7 +80,7 @@ class SQLAlchemyContactRepository(ContactRepository):
         contact_model = result.scalar_one_or_none()
         return self._model_to_entity(contact_model) if contact_model else None
 
-    async def find_all(self, limit: int = 100, offset: int = 0) -> List[Contact]:
+    async def find_all(self, limit: int = 100, offset: int = 0) -> list[Contact]:
         """Find all contacts with pagination."""
         stmt = (
             select(ContactModel)
@@ -107,10 +108,8 @@ class SQLAlchemyContactRepository(ContactRepository):
 
     def _model_to_entity(self, model: ContactModel) -> Contact:
         """Convert ContactModel to Contact entity."""
-        from ...domain.entities.contact import LessonType, PreferredContact, ContactStatus
-        
         phone = Phone(model.phone) if model.phone else None
-        
+
         return Contact(
             id=model.id,
             name=model.name,
@@ -121,5 +120,5 @@ class SQLAlchemyContactRepository(ContactRepository):
             preferred_contact=PreferredContact(model.preferred_contact),
             status=ContactStatus(model.status),
             created_at=model.created_at,
-            updated_at=model.updated_at
+            updated_at=model.updated_at,
         )

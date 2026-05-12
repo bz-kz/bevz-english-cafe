@@ -1,0 +1,66 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build outputs
+.next/
+out/
+build/
+dist/
+**/.next/
+**/out/
+**/build/
+**/dist/
+
+# Logs
+*.log
+**/*.log
+
+# Environment files
+.env*
+**/.env*
+
+# Lock files
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+uv.lock
+**/package-lock.json
+**/yarn.lock
+**/pnpm-lock.yaml
+**/uv.lock
+
+# Generated files
+*.d.ts
+**/*.d.ts
+
+# Coverage
+coverage/
+**/coverage/
+
+# Testing
+test-results/
+playwright-report/
+**/test-results/
+**/playwright-report/
+
+# IDE
+.vscode/
+.idea/
+**/.vscode/
+**/.idea/
+
+# Python
+__pycache__/
+**/__pycache__/
+*.pyc
+**/*.pyc
+.pytest_cache/
+**/.pytest_cache/
+
+# Docker
+Dockerfile*
+**/Dockerfile*
+
+# Keep GitHub Actions formatting readable
+# .github/workflows/*.yml

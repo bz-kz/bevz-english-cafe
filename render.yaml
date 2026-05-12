@@ -1,0 +1,21 @@
+# services:
+#   - type: web
+#     name: kiro-backend
+#     env: python
+#     buildCommand: "uv sync --frozen"
+#     startCommand: "uvicorn app.main:app --host 0.0.0.0 --port 8000"
+#     pythonVersion: 3.12
+#     useUv: true
+#     autoDeploy: true
+#     repo: https://github.com/jiovaniboxx/kz-bz-kiro
+#     branch: main
+
+services:
+  - type: web
+    name: english-cafe-backend
+    runtime: python
+    buildCommand: "cd backend && pip install -e ."
+    startCommand: "cd backend && python -m app.main"
+    autoDeploy: true
+    repo: https://github.com/your-username/your-repo
+    branch: main

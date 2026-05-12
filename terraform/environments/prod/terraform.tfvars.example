@@ -1,0 +1,99 @@
+# Production Environment Configuration Example
+# Copy this file to terraform.tfvars and fill in your actual values
+
+# Application Configuration
+application_name = "english-cafe-prod"
+aws_region      = "ap-northeast-1"
+
+# New Relic Configuration
+newrelic_account_id  = "your-newrelic-account-id"
+newrelic_api_key     = "your-newrelic-api-key"
+newrelic_license_key = "your-newrelic-license-key"
+
+# Grafana Configuration
+grafana_url                  = "https://your-org.grafana.net"
+grafana_auth_token          = "your-grafana-service-account-token"
+grafana_prometheus_endpoint = "https://prometheus-prod-01-eu-west-0.grafana.net/api/prom"
+grafana_api_key            = "your-grafana-api-key"
+
+# Prometheus Configuration (if using external Prometheus)
+prometheus_url      = "https://prometheus-prod-01-eu-west-0.grafana.net/api/prom"
+prometheus_username = "your-prometheus-username"
+prometheus_password = "your-prometheus-password"
+
+# Vercel Configuration
+vercel_api_token    = "your-vercel-api-token"
+vercel_project_name = "english-cafe"
+custom_domain       = "english-cafe.com"  # Optional
+
+# Render Configuration
+render_service_name = "english-cafe-api"
+render_api_key     = "rnd_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"  # Render Dashboard → Account Settings → API Keys
+
+# GitHub Configuration
+github_repository = "your-org/english-cafe-website"
+
+# Notification Configuration
+slack_webhook_url           = "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK"
+admin_email                = "admin@english-cafe.com"
+pagerduty_integration_key   = "your-pagerduty-integration-key"  # Optional
+
+# Runbook Configuration
+runbook_url = "https://github.com/your-org/english-cafe/wiki/runbooks"
+
+# Feature Flags
+enable_aws_monitoring    = false  # Set to true if using AWS resources
+enable_custom_metrics    = false  # Set to true for custom Lambda metrics
+enable_business_alerts   = true
+enable_performance_alerts = true
+enable_error_alerts      = true
+
+# Alert Thresholds (Production - Strict)
+alert_thresholds = {
+  error_rate_critical    = 2     # 2% error rate triggers critical alert
+  error_rate_warning     = 1     # 1% error rate triggers warning
+  response_time_critical = 2000  # 2 seconds response time critical
+  response_time_warning  = 1500  # 1.5 seconds response time warning
+  memory_usage_critical  = 80    # 80% memory usage critical
+  memory_usage_warning   = 70    # 70% memory usage warning
+  lcp_critical          = 2500   # 2.5 seconds LCP critical
+  lcp_warning           = 2000   # 2 seconds LCP warning
+  fid_critical          = 100    # 100ms FID critical
+  fid_warning           = 75     # 75ms FID warning
+  cls_critical          = 0.1    # 0.1 CLS critical
+  cls_warning           = 0.05   # 0.05 CLS warning
+}
+
+# Cost Management
+monthly_budget_limit = 50  # USD
+
+# Data Retention
+data_retention_days = 90
+log_retention_days  = 30
+
+# Backup Configuration
+enable_backup    = true
+backup_schedule  = "0 2 * * *"  # Daily at 2 AM JST
+
+# Security Configuration
+allowed_ip_ranges = ["0.0.0.0/0"]  # Restrict this in production
+enable_encryption = true
+
+# Scaling Configuration
+auto_scaling_enabled   = false
+scale_up_threshold    = 80
+scale_down_threshold  = 30
+
+# Email Configuration (for backend contact form)
+smtp_host     = "smtp.gmail.com"
+smtp_port     = "587"
+smtp_username = "your-email@gmail.com"
+smtp_password = "your-app-password"
+
+# Application Security
+app_secret_key = "your-secret-key-for-jwt-and-encryption"
+
+# Third-party Integrations (Optional)
+enable_third_party_integrations = false
+datadog_api_key                = ""  # Optional
+splunk_token                   = ""  # Optional

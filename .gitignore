@@ -38,3 +38,4 @@ frontend/coverage/
 # Claude Code harness — never commit personal/runtime files
 .claude/settings.local.json
 .claude/worktrees/
+.claude/scheduled_tasks.lock

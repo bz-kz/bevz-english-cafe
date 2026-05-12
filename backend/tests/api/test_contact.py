@@ -104,6 +104,60 @@ class TestContactAPI:
 
         assert response.status_code == 422  # Validation error
 
+    async def test_create_contact_invalid_phone(
+        self, client: AsyncClient, async_session: AsyncSession
+    ):
+        """電話番号が不正形式の問い合わせ作成テスト (Pydantic 境界で 422)"""
+        contact_data = {
+            "name": "電話テスト",
+            "email": "phone@example.com",
+            "phone": "abc-defg",  # regex 不一致
+            "lesson_type": "trial",
+            "preferred_contact": "email",
+            "message": "電話番号の形式バリデーションテストです。",
+        }
+
+        response = await client.post("/api/v1/contacts/", json=contact_data)
+
+        assert response.status_code == 422  # Validation error
+
+    async def test_create_contact_name_whitespace_stripped(
+        self, client: AsyncClient, async_session: AsyncSession
+    ):
+        """名前の前後空白が str_strip_whitespace で除去されることをテスト"""
+        contact_data = {
+            "name": "  John  ",
+            "email": "john@example.com",
+            "lesson_type": "trial",
+            "preferred_contact": "email",
+            "message": "前後空白の除去テストです。",
+        }
+
+        create_response = await client.post("/api/v1/contacts/", json=contact_data)
+        assert create_response.status_code == 201
+        contact_id = create_response.json()["contact_id"]
+
+        # 保存値を取得して空白除去を確認
+        get_response = await client.get(f"/api/v1/contacts/{contact_id}")
+        assert get_response.status_code == 200
+        assert get_response.json()["name"] == "John"
+
+    async def test_create_contact_empty_string_name(
+        self, client: AsyncClient, async_session: AsyncSession
+    ):
+        """空文字列の名前は str_strip_whitespace 後も min_length=1 で 422"""
+        contact_data = {
+            "name": "",
+            "email": "empty@example.com",
+            "lesson_type": "trial",
+            "preferred_contact": "email",
+            "message": "空名のバリデーションテストです。",
+        }
+
+        response = await client.post("/api/v1/contacts/", json=contact_data)
+
+        assert response.status_code == 422  # Validation error
+
     async def test_get_contact_success(
         self, client: AsyncClient, async_session: AsyncSession
     ):

@@ -30,5 +30,8 @@ services:
     #   SMTP_PASSWORD=               # SMTP のアプリパスワード等
     #   FROM_EMAIL=                  # 送信元アドレス
     #   ADMIN_EMAIL=                 # 問い合わせ通知の宛先（管理者）
-    #   CORS_ORIGINS=                # 例: https://example.com,https://www.example.com
+    #   CORS_ORIGINS=                # カンマ区切りの完全 origin URL（末尾スラッシュ無）
+    #                                # 例: https://english-cafe.vercel.app,https://www.english-cafe.com
+    #                                # ※ *.vercel.app の preview URL は app/main.py の
+    #                                #    allow_origin_regex で別途許可される
     #   DATABASE_URL=                # Render Postgres から自動注入される想定

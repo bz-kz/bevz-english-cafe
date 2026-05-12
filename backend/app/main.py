@@ -57,10 +57,11 @@ if settings.cors_origins:
     additional_origins = settings.cors_origins.split(",")
     allowed_origins.extend([origin.strip() for origin in additional_origins])
 
-# CORS: 開発+本番のドメイン許可リスト経由
+# CORS: 開発許可リスト + 本番は環境変数の cors_origins + Vercel プレビュー URL を regex で許可
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
+    allow_origin_regex=r"^https://[a-z0-9-]+\.vercel\.app$",
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH", "HEAD"],
     allow_headers=["*"],

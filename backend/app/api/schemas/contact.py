@@ -1,23 +1,24 @@
-"""Contact API schemas."""
-from typing import Optional
+"""Contact API schemas.
 
-from pydantic import BaseModel, EmailStr, Field
+Mirror of frontend/src/schemas/contact.ts (zod). Keep constraints in sync.
+"""
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from app.domain.enums.contact import LessonType, PreferredContact
+
+# 電話番号パターン: frontend/src/schemas/contact.ts と同じ regex
+# 受け付けるのは入力時点の緩い形式（ハイフン有無を許容）。
+# 詳細なバリデーション（携帯・固定・IP 電話等の区別）は
+# app/domain/value_objects/phone.py の Phone VO が担う。
+_PHONE_PATTERN = r"^(\+81|0)[0-9]{1,4}-?[0-9]{1,4}-?[0-9]{3,4}$"
 
 
 class ContactCreateRequest(BaseModel):
     """問い合わせ作成リクエストスキーマ"""
 
-    name: str = Field(..., min_length=1, max_length=100, description="お名前")
-    email: EmailStr = Field(..., description="メールアドレス")
-    phone: Optional[str] = Field(None, max_length=20, description="電話番号")
-    lesson_type: LessonType = Field(..., description="希望レッスンタイプ")
-    preferred_contact: PreferredContact = Field(..., description="希望連絡方法")
-    message: str = Field(..., min_length=1, max_length=1000, description="メッセージ")
-
-    model_config = {
-        "json_schema_extra": {
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+        json_schema_extra={
             "example": {
                 "name": "山田太郎",
                 "email": "yamada@example.com",
@@ -26,8 +27,20 @@ class ContactCreateRequest(BaseModel):
                 "preferred_contact": "email",
                 "message": "体験レッスンを受けたいです。",
             }
-        }
-    }
+        },
+    )
+
+    name: str = Field(..., min_length=1, max_length=100, description="お名前")
+    email: EmailStr = Field(..., description="メールアドレス")
+    phone: str | None = Field(
+        None,
+        max_length=20,
+        pattern=_PHONE_PATTERN,
+        description="電話番号",
+    )
+    lesson_type: LessonType = Field(..., description="希望レッスンタイプ")
+    preferred_contact: PreferredContact = Field(..., description="希望連絡方法")
+    message: str = Field(..., min_length=1, max_length=1000, description="メッセージ")
 
 
 class ContactResponse(BaseModel):
@@ -36,7 +49,7 @@ class ContactResponse(BaseModel):
     id: str = Field(..., description="問い合わせID")
     name: str = Field(..., description="お名前")
     email: str = Field(..., description="メールアドレス")
-    phone: Optional[str] = Field(None, description="電話番号")
+    phone: str | None = Field(None, description="電話番号")
     lesson_type: str = Field(..., description="希望レッスンタイプ")
     preferred_contact: str = Field(..., description="希望連絡方法")
     message: str = Field(..., description="メッセージ")

@@ -1,0 +1,73 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git status)",
+      "Bash(git status:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git diff:*)",
+      "Bash(git branch:*)",
+      "Bash(git tag:*)",
+      "Bash(ls:*)",
+      "Bash(pwd)",
+      "Bash(cat:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(wc:*)",
+      "Bash(file:*)",
+      "Bash(stat:*)",
+      "Bash(find ./*)",
+      "Bash(find . -*)",
+      "Bash(grep:*)",
+      "Bash(rg:*)",
+      "Bash(npm run lint:*)",
+      "Bash(npm run test:*)",
+      "Bash(npm run format:check)",
+      "Bash(npm run ci:local)",
+      "Bash(npx tsc --noEmit:*)",
+      "Bash(npx prettier --check:*)",
+      "Bash(uv run ruff check:*)",
+      "Bash(uv run ruff format --check:*)",
+      "Bash(uv run pytest:*)",
+      "Bash(uv run mypy:*)",
+      "Bash(uv run alembic upgrade head)",
+      "Bash(uv run alembic current)",
+      "Bash(cd backend && uv run:*)",
+      "Bash(cd frontend && npm:*)",
+      "Bash(cd frontend && npx:*)"
+    ],
+    "ask": [
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git checkout:*)",
+      "Bash(git merge:*)",
+      "Bash(git rebase:*)",
+      "Bash(git restore:*)",
+      "Bash(npm install:*)",
+      "Bash(uv sync:*)",
+      "Bash(uv add:*)",
+      "Bash(uv run alembic downgrade:*)",
+      "Bash(docker compose:*)",
+      "Bash(docker-compose:*)"
+    ],
+    "deny": [
+      "Bash(rm -rf:*)",
+      "Bash(sudo:*)",
+      "Bash(git push:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(git clean -f:*)",
+      "Bash(npm publish:*)",
+      "Bash(uv publish:*)",
+      "Bash(find /*)",
+      "Bash(find / -*)",
+      "Read(./.env)",
+      "Read(./backend/.env)",
+      "Read(./frontend/.env.local)"
+    ]
+  },
+  "env": {
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "NEXT_TELEMETRY_DISABLED": "1",
+    "RUFF_NO_UPDATE_CHECK": "1"
+  }
+}

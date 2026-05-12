@@ -33,6 +33,10 @@ class SQLAlchemyContactRepository(ContactRepository):
         Returns:
             The saved contact entity with updated fields
         """
+        # Contact.__post_init__ で email は必須（None なら ValueError）と保証される。
+        # ただし dataclass の型は Email | None なので、ここで narrow しておく。
+        assert contact.email is not None, "Contact.email は必須項目"
+
         # Check if contact already exists
         existing = await self._session.get(ContactModel, contact.id)
 

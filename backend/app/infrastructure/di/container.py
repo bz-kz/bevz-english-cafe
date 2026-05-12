@@ -4,7 +4,7 @@ DIコンテナ
 依存関係の管理と注入を行う
 """
 
-from typing import TypeVar
+from typing import TypeVar, cast
 
 from ...config import get_settings
 from ...services.email_service import EmailService, MockEmailService, SMTPEmailService
@@ -25,7 +25,7 @@ class Container:
     アプリケーション全体の依存関係を管理
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """初期化"""
         self._services: dict[type, object] = {}
         self._setup_services()
@@ -53,7 +53,8 @@ class Container:
                 from_email=settings.from_email,
                 admin_email=settings.admin_email,
             )
-        self._services[EmailService] = email_service
+        # EmailService は Protocol のため、key として cast する
+        self._services[cast(type, EmailService)] = email_service
 
         # イベントハンドラーの登録（email_service を必要とするため後に登録）
         self._register_event_handlers(event_bus, email_service)
@@ -96,7 +97,9 @@ class Container:
         if service_type not in self._services:
             raise KeyError(f"Service {service_type.__name__} is not registered")
 
-        return self._services[service_type]
+        # _services は dict[type, object] で保持しているため、
+        # 取得時に呼び出し側の T へ cast する。
+        return cast(T, self._services[service_type])
 
     def register(self, service_type: type[T], instance: T) -> None:
         """
@@ -122,7 +125,9 @@ class Container:
 
     def email_service(self) -> EmailService:
         """EmailServiceを取得"""
-        return self.get(EmailService)
+        # EmailService は Protocol のため type[EmailService] を直接渡せない。
+        # 内部の cast(type, EmailService) で登録した key と整合させる。
+        return self.get(cast(type, EmailService))
 
 
 # グローバルコンテナインスタンス

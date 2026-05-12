@@ -5,19 +5,24 @@
 """
 
 from abc import ABC, abstractmethod
+from typing import Generic, TypeVar
 
 from ...domain.events.base import DomainEvent
 
+E = TypeVar("E", bound=DomainEvent)
 
-class EventHandler(ABC):
+
+class EventHandler(ABC, Generic[E]):
     """
     イベントハンドラー基底クラス
 
-    ドメインイベントを処理するハンドラーのインターフェース
+    ドメインイベントを処理するハンドラーのインターフェース。
+    具象ハンドラーは Generic 型引数で具体的なイベント型を指定し、
+    handle メソッドのシグネチャを共変的に絞り込む。
     """
 
     @abstractmethod
-    async def handle(self, event: DomainEvent) -> None:
+    async def handle(self, event: E) -> None:
         """
         イベントを処理
 
@@ -27,10 +32,10 @@ class EventHandler(ABC):
 
     @property
     @abstractmethod
-    def event_type(self) -> type:
+    def event_type(self) -> type[E]:
         """
         処理するイベントタイプを取得
 
         Returns:
-            type: 処理するイベントタイプ
+            type[E]: 処理するイベントタイプ
         """

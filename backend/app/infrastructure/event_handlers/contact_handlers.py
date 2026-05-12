@@ -6,7 +6,6 @@ Contact関連のイベントハンドラー
 
 import logging
 
-from ...domain.events.base import DomainEvent
 from ...domain.events.contact_events import ContactCreated, ContactProcessed
 from ...services.email_service import EmailService
 from ..event_bus.handlers import EventHandler
@@ -14,7 +13,7 @@ from ..event_bus.handlers import EventHandler
 logger = logging.getLogger(__name__)
 
 
-class ContactCreatedHandler(EventHandler):
+class ContactCreatedHandler(EventHandler[ContactCreated]):
     """
     問い合わせ作成イベントハンドラー
 
@@ -25,7 +24,7 @@ class ContactCreatedHandler(EventHandler):
     """
 
     @property
-    def event_type(self) -> type[DomainEvent]:
+    def event_type(self) -> type[ContactCreated]:
         """処理するイベントタイプ"""
         return ContactCreated
 
@@ -47,7 +46,7 @@ class ContactCreatedHandler(EventHandler):
         )
 
 
-class ContactProcessedHandler(EventHandler):
+class ContactProcessedHandler(EventHandler[ContactProcessed]):
     """
     問い合わせ処理完了イベントハンドラー
 
@@ -62,7 +61,7 @@ class ContactProcessedHandler(EventHandler):
         self._email_service = email_service
 
     @property
-    def event_type(self) -> type[DomainEvent]:
+    def event_type(self) -> type[ContactProcessed]:
         """処理するイベントタイプ"""
         return ContactProcessed
 

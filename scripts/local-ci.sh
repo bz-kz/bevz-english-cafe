@@ -83,7 +83,7 @@ cd ..
 cd backend
 uv run ruff check .
 uv run ruff format --check .
-uv run mypy app/domain app/services
+uv run mypy app/domain app/services app/api app/infrastructure
 cd ..
 
 print_success "Lint and format checks passed"

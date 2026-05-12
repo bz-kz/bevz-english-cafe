@@ -6,6 +6,7 @@
 
 import logging
 from collections import defaultdict
+from typing import Any
 
 from ...domain.events.base import DomainEvent
 from .event_bus import EventBus
@@ -18,12 +19,16 @@ class InMemoryEventBus(EventBus):
     """
     インメモリイベントバス
 
-    メモリ内でドメインイベントの配信と処理を行う
+    メモリ内でドメインイベントの配信と処理を行う。
+    handler は具象イベント型ごとに型パラメータが異なるため、
+    内部ストレージは EventHandler[Any] として保持する。
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """初期化"""
-        self._handlers: dict[type[DomainEvent], list[EventHandler]] = defaultdict(list)
+        self._handlers: dict[type[DomainEvent], list[EventHandler[Any]]] = defaultdict(
+            list
+        )
 
     async def publish(self, event: DomainEvent) -> None:
         """
@@ -62,7 +67,9 @@ class InMemoryEventBus(EventBus):
                 # エラーが発生してもほかのハンドラーの処理は継続
                 continue
 
-    def subscribe(self, event_type: type[DomainEvent], handler: EventHandler) -> None:
+    def subscribe(
+        self, event_type: type[DomainEvent], handler: EventHandler[Any]
+    ) -> None:
         """
         イベントハンドラーを登録
 
@@ -80,7 +87,9 @@ class InMemoryEventBus(EventBus):
                 f"Handler {handler.__class__.__name__} already registered for event type: {event_type.__name__}"
             )
 
-    def unsubscribe(self, event_type: type[DomainEvent], handler: EventHandler) -> None:
+    def unsubscribe(
+        self, event_type: type[DomainEvent], handler: EventHandler[Any]
+    ) -> None:
         """
         イベントハンドラーの登録を解除
 
@@ -98,7 +107,7 @@ class InMemoryEventBus(EventBus):
                 f"Handler {handler.__class__.__name__} not found for event type: {event_type.__name__}"
             )
 
-    def get_handlers(self, event_type: type[DomainEvent]) -> list[EventHandler]:
+    def get_handlers(self, event_type: type[DomainEvent]) -> list[EventHandler[Any]]:
         """
         指定されたイベントタイプのハンドラーを取得
 
@@ -106,7 +115,7 @@ class InMemoryEventBus(EventBus):
             event_type: イベントタイプ
 
         Returns:
-            List[EventHandler]: ハンドラーのリスト
+            List[EventHandler[Any]]: ハンドラーのリスト
         """
         return self._handlers.get(event_type, []).copy()
 

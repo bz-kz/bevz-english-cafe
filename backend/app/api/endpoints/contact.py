@@ -17,7 +17,6 @@ from app.infrastructure.repositories.sqlalchemy_contact_repository import (
     SQLAlchemyContactRepository,
 )
 from app.services.contact_service import ContactService
-from app.services.email_service import EmailService
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +28,8 @@ async def get_contact_service(
 ) -> ContactService:
     """Per-request ContactService: container singletons + session-scoped repository."""
     container = get_container()
-    email_service = container.get(EmailService)
+    # EmailService は Protocol のため Container.email_service() 経由で取得する
+    email_service = container.email_service()
     contact_repository = SQLAlchemyContactRepository(session)
     return ContactService(contact_repository, email_service)
 

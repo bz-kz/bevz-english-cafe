@@ -1,0 +1,34 @@
+services:
+  - type: web
+    name: english-cafe-backend
+    runtime: python
+    buildCommand: "pip install -e ."
+    startCommand: "python -m app.main"
+    autoDeploy: true
+    repo: https://github.com/your-username/your-repo
+    branch: main
+
+
+# databases:
+#   - name: prod
+#     postgresMajorVersion: '17'
+#     region: frankfurt
+#     plan: basic-4gb
+#     databaseName: prod_app
+#     user: app_user
+#     ipAllowList:
+#       - source: 203.0.113.4/30
+#         description: office
+#       - source: 198.51.100.1
+#         description: home
+#     readReplicas:
+#       - name: prod-replica
+
+#   - name: private database
+#     databaseName: private
+#     ipAllowList: []
+
+#   - name: highly available database
+#     plan: pro-16gb
+#     highAvailability:
+#       enabled: true

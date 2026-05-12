@@ -6,8 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 npm-workspaces monorepo for an English-conversation cafe marketing site.
 
-- `frontend/` — Next.js 14 App Router + TypeScript + Tailwind + Zustand. Runs on `:3000`.
-- `backend/` — FastAPI on Python 3.12, managed by **uv** (not pip/poetry). Runs on `:8000`.
+- `frontend/` — Next.js 14 App Router + TypeScript + Tailwind + Zustand. Runs on `:3010`.
+- `backend/` — FastAPI on Python 3.12, managed by **uv** (not pip/poetry). Runs on `:8010`.
 - `shared/types/` and `shared/constants/` — TypeScript types/config intended to be shared (only frontend imports them today).
 - `terraform/` — infra for the production environment (Render + monitoring).
 - `docker-compose.yml` — local dev wiring frontend + backend + Postgres 15.
@@ -24,8 +24,8 @@ npm run setup
 
 # Dev (docker-compose: frontend + backend + postgres)
 npm run dev                 # = docker-compose up -d
-npm run dev:frontend        # next dev on 0.0.0.0:3000
-npm run dev:backend         # uv run uvicorn app.main:app --reload --port 8000
+npm run dev:frontend        # next dev on 0.0.0.0:3010
+npm run dev:backend         # uv run uvicorn app.main:app --reload --port 8010
 
 # Tests
 npm run test                # frontend jest + backend pytest

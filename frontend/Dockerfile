@@ -16,5 +16,5 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_OPTIONS="--max-old-space-size=4096"
 
 # 開発サーバーを起動
-EXPOSE 3000
+EXPOSE 3010
 CMD ["npm", "run", "dev"]

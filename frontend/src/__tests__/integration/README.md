@@ -48,7 +48,7 @@ npm run test:integration:ci
 ## テスト設定
 
 ### 環境変数
-- `NEXT_PUBLIC_API_URL`: APIサーバーのURL（デフォルト: http://localhost:8000）
+- `NEXT_PUBLIC_API_URL`: APIサーバーのURL（デフォルト: http://localhost:8010）
 
 ### タイムアウト
 - 統合テストのタイムアウトは10秒に設定されています
@@ -67,14 +67,14 @@ npm run test:integration:ci
 
 **解決方法:**
 1. バックエンドサーバーを起動してください
-2. `http://localhost:8000/api/health` にアクセスして動作確認
+2. `http://localhost:8010/api/health` にアクセスして動作確認
 
 ### ポート競合
 APIサーバーのポートが使用中の場合：
 
 ```bash
 # ポート使用状況確認
-lsof -i :8000
+lsof -i :8010
 
 # プロセス終了
 kill -9 <PID>

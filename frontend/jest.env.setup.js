@@ -4,7 +4,7 @@
  */
 
 // テスト用環境変数
-process.env.NEXT_PUBLIC_API_URL = 'http://localhost:8000';
+process.env.NEXT_PUBLIC_API_URL = 'http://localhost:8010';
 process.env.NODE_ENV = 'test';
 
 // テスト用のモック値
@@ -14,5 +14,5 @@ process.env.NEXT_PUBLIC_YOUTUBE_API_KEY = 'test-youtube-key';
 // デバッグ用
 console.log('Jest環境変数設定完了:', {
   API_BASE_URL: process.env.NEXT_PUBLIC_API_URL,
-  NODE_ENV: process.env.NODE_ENV
+  NODE_ENV: process.env.NODE_ENV,
 });

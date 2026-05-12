@@ -47,9 +47,9 @@ settings = get_settings()
 
 # 開発環境用のCORS設定
 allowed_origins = [
-    "http://localhost:3000",  # フロントエンド開発サーバー
-    "http://127.0.0.1:3000",  # 代替ローカルホスト
-    "https://localhost:3000",  # HTTPS版
+    "http://localhost:3010",  # フロントエンド開発サーバー
+    "http://127.0.0.1:3010",  # 代替ローカルホスト
+    "https://localhost:3010",  # HTTPS版
 ]
 
 # 環境変数からの追加オリジン
@@ -100,4 +100,4 @@ app.include_router(contact_router, prefix="/api/v1")
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8010)

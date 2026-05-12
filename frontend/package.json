@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --hostname 0.0.0.0 --port 3000",
+    "dev": "next dev --hostname 0.0.0.0 --port 3010",
     "build": "next build",
     "build:analyze": "ANALYZE=true next build",
     "start": "next start",
@@ -18,7 +18,7 @@
     "test:integration:ci": "jest --config jest.integration.config.js --ci --coverage --watchAll=false",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "lighthouse": "lighthouse http://localhost:3000 --output html --output-path ./lighthouse-report.html",
+    "lighthouse": "lighthouse http://localhost:3010 --output html --output-path ./lighthouse-report.html",
     "perf:audit": "npm run build && npm run lighthouse"
   },
   "dependencies": {

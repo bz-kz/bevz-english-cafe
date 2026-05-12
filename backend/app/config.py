@@ -12,10 +12,10 @@ class Settings(BaseSettings):
     debug: bool = True
 
     # データベース設定
-    database_url: str = "postgresql://postgres:password@localhost:5432/english_cafe_db"
+    database_url: str = "postgresql://postgres:password@localhost:5442/english_cafe_db"
 
     # CORS設定
-    cors_origins: str = "http://localhost:3000"
+    cors_origins: str = "http://localhost:3010"
 
     # メール設定
     smtp_host: str = "smtp.gmail.com"

@@ -7,7 +7,7 @@ import { contactApi } from '@/lib/api';
 import { ContactFormData } from '@/lib/api';
 
 // テスト用のモックサーバーURL
-const TEST_API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const TEST_API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8010';
 
 describe('API Integration Tests', () => {
   beforeAll(() => {
@@ -20,14 +20,15 @@ describe('API Integration Tests', () => {
       name: 'テスト太郎',
       email: 'test@example.com',
       phone: '090-1234-5678',
-      message: 'これは統合テスト用のメッセージです。レッスンについて詳しく教えてください。',
+      message:
+        'これは統合テスト用のメッセージです。レッスンについて詳しく教えてください。',
       lessonType: 'trial',
-      preferredContact: 'email'
+      preferredContact: 'email',
     };
 
     it('should successfully submit contact form with valid data', async () => {
       const response = await contactApi.submit(validContactData);
-      
+
       expect(response.success).toBe(true);
       expect(response.message).toContain('お問い合わせを受け付けました');
       expect(response.id).toBeDefined();
@@ -39,7 +40,7 @@ describe('API Integration Tests', () => {
         ...validContactData,
         name: '',
         email: '',
-        message: ''
+        message: '',
       };
 
       await expect(contactApi.submit(invalidData)).rejects.toThrow();
@@ -48,7 +49,7 @@ describe('API Integration Tests', () => {
     it('should handle validation errors for invalid email format', async () => {
       const invalidEmailData = {
         ...validContactData,
-        email: 'invalid-email'
+        email: 'invalid-email',
       };
 
       await expect(contactApi.submit(invalidEmailData)).rejects.toThrow();
@@ -57,7 +58,7 @@ describe('API Integration Tests', () => {
     it('should handle validation errors for short message', async () => {
       const shortMessageData = {
         ...validContactData,
-        message: '短い'
+        message: '短い',
       };
 
       await expect(contactApi.submit(shortMessageData)).rejects.toThrow();
@@ -97,8 +98,8 @@ describe('API Integration Tests', () => {
       const response = await fetch(`${TEST_API_URL}/health`, {
         method: 'GET',
         headers: {
-          'Origin': 'http://localhost:3000'
-        }
+          Origin: 'http://localhost:3010',
+        },
       });
 
       expect(response.ok).toBe(true);

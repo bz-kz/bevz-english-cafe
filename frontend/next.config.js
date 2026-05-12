@@ -128,7 +128,7 @@ const nextConfig = {
 
   env: {
     NEXT_PUBLIC_API_URL:
-      process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
+      process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8010',
   },
 
   // 開発サーバーの設定
@@ -143,7 +143,7 @@ const nextConfig = {
   },
 
   // 開発時のCORS問題を解決
-  allowedDevOrigins: ['0.0.0.0:3000', 'localhost:3000'],
+  allowedDevOrigins: ['0.0.0.0:3010', 'localhost:3010'],
 
   // 開発時のCORS設定を追加
   async headers() {
@@ -204,7 +204,7 @@ const nextConfig = {
   compress: true,
 
   async rewrites() {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8010';
     return [
       {
         source: '/api/:path*',

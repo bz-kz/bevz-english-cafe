@@ -30,6 +30,7 @@ backend/.venv/
 playwright-report/
 test-results/
 lighthouse-report.html
+frontend/coverage/
 
 # Bundle analyzer output (Stage D)
 .next/analyze/

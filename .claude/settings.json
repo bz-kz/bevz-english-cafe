@@ -34,21 +34,27 @@
       "Bash(uv run alembic current)",
       "Bash(cd backend && uv run:*)",
       "Bash(cd frontend && npm:*)",
-      "Bash(cd frontend && npx:*)"
-    ],
-    "ask": [
+      "Bash(cd frontend && npx:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
+      "Bash(git tag -a:*)",
+      "Bash(npm install:*)",
+      "Bash(npm ci:*)",
+      "Bash(uv sync:*)",
+      "Bash(uv add:*)",
+      "Bash(uv pip install:*)",
+      "Bash(uv run alembic upgrade:*)",
+      "Bash(docker compose up -d)",
+      "Bash(docker compose down)",
+      "Bash(docker-compose up -d)",
+      "Bash(docker-compose down)"
+    ],
+    "ask": [
       "Bash(git checkout:*)",
       "Bash(git merge:*)",
       "Bash(git rebase:*)",
       "Bash(git restore:*)",
-      "Bash(npm install:*)",
-      "Bash(uv sync:*)",
-      "Bash(uv add:*)",
-      "Bash(uv run alembic downgrade:*)",
-      "Bash(docker compose:*)",
-      "Bash(docker-compose:*)"
+      "Bash(uv run alembic downgrade:*)"
     ],
     "deny": [
       "Bash(rm -rf:*)",

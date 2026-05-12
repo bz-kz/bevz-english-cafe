@@ -50,7 +50,7 @@
 5. "Create key" をクリック
 6. 生成されたキーをコピー
 
-# 形式: NRAK-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+# 形式: NRAK-<your-newrelic-user-api-key>
 ```
 
 ### 3. License Key の取得
@@ -62,7 +62,7 @@
 3. "License keys" タブを選択
 4. "Browser" 用のLicense keyをコピー
 
-# 形式: XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+# 形式: <your-newrelic-license-key> (英数字40桁程度)
 ```
 
 ### New Relic API テスト
@@ -111,7 +111,7 @@ curl -H "Api-Key: YOUR_USER_API_KEY" \
 8. "Generate token" をクリック
 9. 生成されたトークンをコピー
 
-# 形式: glsa_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX_XXXXXXXX
+# 形式: glsa_<your-grafana-service-account-token>
 ```
 
 ### 3. API Key の作成 (オプション)
@@ -126,7 +126,7 @@ curl -H "Api-Key: YOUR_USER_API_KEY" \
 4. "Add" をクリック
 5. 生成されたキーをコピー
 
-# 形式: eyJrIjoiXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+# 形式: eyJrIjoi<your-grafana-api-key-base64-payload>
 ```
 
 ### Grafana API テスト
@@ -172,7 +172,7 @@ curl -H "Authorization: Bearer YOUR_SERVICE_ACCOUNT_TOKEN" \
 6. "Create" をクリック
 7. 生成されたトークンをコピー
 
-# 形式: XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+# 形式: <your-vercel-personal-access-token>
 ```
 
 ### Vercel API テスト
@@ -213,7 +213,7 @@ curl -H "Authorization: Bearer YOUR_VERCEL_TOKEN" \
 6. "Create" をクリック
 7. 生成されたキーをコピー
 
-# 形式: rnd_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+# 形式: rnd_<your-render-api-key>
 ```
 
 ### Render API テスト
@@ -253,7 +253,7 @@ curl -H "Authorization: Bearer YOUR_RENDER_API_KEY" \
 10. "Allow" をクリック
 11. 生成されたWebhook URLをコピー
 
-# 形式: https://hooks.slack.com/services/TEXAMPLE/BEXAMPLE/EXAMPLE_TOKEN
+# 形式: https://hooks.slack.com/services/<your-slack-team>/<your-slack-channel>/<your-webhook-secret>
 ```
 
 ### Slack Webhook テスト
@@ -278,14 +278,14 @@ aws_region      = "ap-northeast-1"
 
 # New Relic Configuration
 newrelic_account_id  = "1234567890"
-newrelic_api_key     = "NRAK-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
-newrelic_license_key = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+newrelic_api_key     = "NRAK-<your-newrelic-user-api-key>"
+newrelic_license_key = "<your-newrelic-license-key>"
 
 # Grafana Configuration
 grafana_url                  = "https://your-org.grafana.net"
-grafana_auth_token          = "glsa_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX_XXXXXXXX"
+grafana_auth_token          = "glsa_<your-grafana-service-account-token>"
 grafana_prometheus_endpoint = "https://prometheus-prod-01-eu-west-0.grafana.net/api/prom"
-grafana_api_key            = "eyJrIjoiXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+grafana_api_key            = "eyJrIjoi<your-grafana-api-key>"
 
 # Prometheus Configuration (Grafana Cloud内蔵)
 prometheus_url      = "https://prometheus-prod-01-eu-west-0.grafana.net/api/prom"
@@ -293,7 +293,7 @@ prometheus_username = "your-prometheus-username"
 prometheus_password = "your-prometheus-password"
 
 # Vercel Configuration
-vercel_api_token    = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+vercel_api_token    = "<your-vercel-personal-access-token>"
 vercel_project_name = "english-cafe"
 custom_domain       = "english-cafe.com"  # オプション
 
@@ -304,7 +304,7 @@ render_service_name = "english-cafe-api"
 github_repository = "your-org/english-cafe-website"
 
 # Notification Configuration
-slack_webhook_url           = "https://hooks.slack.com/services/TEXAMPLE/BEXAMPLE/EXAMPLE_TOKEN"
+slack_webhook_url           = "https://hooks.slack.com/services/<your-slack-team>/<your-slack-channel>/<your-webhook-secret>"
 admin_email                = "admin@english-cafe.com"
 pagerduty_integration_key   = ""  # オプション
 
@@ -334,11 +334,11 @@ alert_thresholds = {
 
 ```bash
 # 機密情報を環境変数で管理（推奨）
-export TF_VAR_newrelic_api_key="NRAK-XXXXXXXX"
-export TF_VAR_newrelic_license_key="XXXXXXXX"
-export TF_VAR_grafana_auth_token="glsa_XXXXXXXX"
-export TF_VAR_vercel_api_token="XXXXXXXX"
-export TF_VAR_slack_webhook_url="https://hooks.slack.com/services/XXXXXXXX"
+export TF_VAR_newrelic_api_key="NRAK-<your-newrelic-user-api-key>"
+export TF_VAR_newrelic_license_key="<your-newrelic-license-key>"
+export TF_VAR_grafana_auth_token="glsa_<your-grafana-service-account-token>"
+export TF_VAR_vercel_api_token="<your-vercel-personal-access-token>"
+export TF_VAR_slack_webhook_url="<replace-with-real-slack-webhook-url>"
 
 # terraform.tfvarsファイルは使用しない
 ```

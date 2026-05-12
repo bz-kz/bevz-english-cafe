@@ -28,13 +28,13 @@ custom_domain       = "english-cafe.com"  # Optional
 
 # Render Configuration
 render_service_name = "english-cafe-api"
-render_api_key     = "rnd_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"  # Render Dashboard → Account Settings → API Keys
+render_api_key     = "<replace-with-real-render-api-key>"  # Render Dashboard → Account Settings → API Keys (rnd_ prefixed)
 
 # GitHub Configuration
 github_repository = "your-org/english-cafe-website"
 
 # Notification Configuration
-slack_webhook_url           = "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK"
+slack_webhook_url           = "<replace-with-real-slack-webhook-url>"
 admin_email                = "admin@english-cafe.com"
 pagerduty_integration_key   = "your-pagerduty-integration-key"  # Optional
 

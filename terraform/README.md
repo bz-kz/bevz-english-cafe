@@ -77,7 +77,7 @@ export TF_VAR_grafana_url="https://your-org.grafana.net"
 export TF_VAR_grafana_auth_token="your-service-account-token"
 
 # 通知設定
-export TF_VAR_slack_webhook_url="https://hooks.slack.com/services/..."
+export TF_VAR_slack_webhook_url="<replace-with-real-slack-webhook-url>"
 export TF_VAR_admin_email="admin@english-cafe.com"
 ```
 

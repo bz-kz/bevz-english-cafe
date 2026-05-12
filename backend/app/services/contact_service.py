@@ -1,6 +1,5 @@
 """Contact application service."""
 import logging
-from typing import Optional
 from uuid import UUID
 
 from app.domain.entities.contact import Contact
@@ -26,7 +25,7 @@ class ContactService:
         self,
         name: str,
         email: str,
-        phone: Optional[str],
+        phone: str | None,
         lesson_type: str,
         preferred_contact: str,
         message: str,
@@ -72,7 +71,7 @@ class ContactService:
             logger.error(f"Failed to create contact: {e}")
             raise
 
-    async def get_contact_by_id(self, contact_id: UUID) -> Optional[Contact]:
+    async def get_contact_by_id(self, contact_id: UUID) -> Contact | None:
         """IDで問い合わせを取得"""
         try:
             return await self.contact_repository.find_by_id(contact_id)
@@ -84,9 +83,9 @@ class ContactService:
         self,
         contact_id: UUID,
         status: ContactStatus,
-        processed_by: Optional[str] = None,
-        processing_notes: Optional[str] = None,
-    ) -> Optional[Contact]:
+        processed_by: str | None = None,
+        processing_notes: str | None = None,
+    ) -> Contact | None:
         """問い合わせのステータスを更新"""
         try:
             contact = await self.contact_repository.find_by_id(contact_id)

@@ -6,7 +6,6 @@ Contact エンティティ
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Optional
 from uuid import UUID, uuid4
 
 from ..enums.contact import ContactStatus, LessonType, PreferredContact
@@ -29,8 +28,8 @@ class Contact:
 
     # 基本情報
     name: str = field(default="")
-    email: Optional[Email] = field(default=None)
-    phone: Optional[Phone] = field(default=None)
+    email: Email | None = field(default=None)
+    phone: Phone | None = field(default=None)
     message: str = field(default="")
 
     # レッスン関連
@@ -43,11 +42,11 @@ class Contact:
     # タイムスタンプ
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
-    processed_at: Optional[datetime] = field(default=None)
+    processed_at: datetime | None = field(default=None)
 
     # 処理情報
-    processed_by: Optional[str] = field(default=None)
-    processing_notes: Optional[str] = field(default=None)
+    processed_by: str | None = field(default=None)
+    processing_notes: str | None = field(default=None)
 
     # ドメインイベント
     _domain_events: list[DomainEvent] = field(default_factory=list, init=False)
@@ -71,7 +70,7 @@ class Contact:
         message: str,
         lesson_type: str,
         preferred_contact: str,
-        phone: Optional[str] = None,
+        phone: str | None = None,
     ) -> "Contact":
         """
         新しい問い合わせを作成
@@ -97,13 +96,13 @@ class Contact:
         # Enumの変換
         try:
             lesson_type_enum = LessonType(lesson_type)
-        except ValueError:
-            raise ValueError(f"無効なレッスンタイプです: {lesson_type}")
+        except ValueError as err:
+            raise ValueError(f"無効なレッスンタイプです: {lesson_type}") from err
 
         try:
             preferred_contact_enum = PreferredContact(preferred_contact)
-        except ValueError:
-            raise ValueError(f"無効な希望連絡方法です: {preferred_contact}")
+        except ValueError as err:
+            raise ValueError(f"無効な希望連絡方法です: {preferred_contact}") from err
 
         # エンティティの作成
         contact = cls(
@@ -151,7 +150,7 @@ class Contact:
             )
         )
 
-    def process(self, processed_by: str, notes: Optional[str] = None) -> None:
+    def process(self, processed_by: str, notes: str | None = None) -> None:
         """
         問い合わせを処理済みにする
 
@@ -176,10 +175,10 @@ class Contact:
 
     def update_contact_info(
         self,
-        name: Optional[str] = None,
-        email: Optional[str] = None,
-        phone: Optional[str] = None,
-        message: Optional[str] = None,
+        name: str | None = None,
+        email: str | None = None,
+        phone: str | None = None,
+        message: str | None = None,
     ) -> None:
         """
         連絡先情報を更新
@@ -190,7 +189,7 @@ class Contact:
             phone: 新しい電話番号
             message: 新しいメッセージ
         """
-        updated_fields: dict[str, dict[str, Optional[str]]] = {}
+        updated_fields: dict[str, dict[str, str | None]] = {}
 
         if name is not None and name != self.name:
             updated_fields["name"] = {"old": self.name, "new": name}

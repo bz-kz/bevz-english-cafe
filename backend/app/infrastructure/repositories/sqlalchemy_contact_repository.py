@@ -1,6 +1,5 @@
 """SQLAlchemy implementation of Contact repository."""
 
-from typing import Optional
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -68,12 +67,12 @@ class SQLAlchemyContactRepository(ContactRepository):
         await self._session.refresh(contact_model)
         return self._model_to_entity(contact_model)
 
-    async def find_by_id(self, contact_id: UUID) -> Optional[Contact]:
+    async def find_by_id(self, contact_id: UUID) -> Contact | None:
         """Find a contact by its ID."""
         contact_model = await self._session.get(ContactModel, contact_id)
         return self._model_to_entity(contact_model) if contact_model else None
 
-    async def find_by_email(self, email: str) -> Optional[Contact]:
+    async def find_by_email(self, email: str) -> Contact | None:
         """Find a contact by email address."""
         stmt = select(ContactModel).where(ContactModel.email == email)
         result = await self._session.execute(stmt)

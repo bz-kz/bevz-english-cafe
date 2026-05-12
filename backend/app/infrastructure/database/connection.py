@@ -5,11 +5,11 @@ SQLAlchemyを使用したPostgreSQL接続の管理
 """
 
 import os
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
 from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 
 from ...config import get_settings
 
@@ -17,15 +17,15 @@ from ...config import get_settings
 def get_database_url(async_mode: bool = True) -> str:
     """
     データベースURLを取得
-    
+
     Args:
         async_mode: 非同期モードかどうか
-        
+
     Returns:
         str: データベースURL
     """
     settings = get_settings()
-    
+
     if async_mode:
         # 非同期用（asyncpg）
         return settings.database_url.replace("postgresql://", "postgresql+asyncpg://")
@@ -73,9 +73,9 @@ SessionLocal = sessionmaker(
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
     """
     データベースセッションを取得
-    
+
     FastAPIの依存性注入で使用
-    
+
     Yields:
         AsyncSession: データベースセッション
     """
@@ -90,12 +90,12 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
             await session.close()
 
 
-def get_sync_session():
+def get_sync_session() -> Session:
     """
     同期データベースセッションを取得
-    
+
     マイグレーションやテストで使用
-    
+
     Returns:
         Session: 同期データベースセッション
     """

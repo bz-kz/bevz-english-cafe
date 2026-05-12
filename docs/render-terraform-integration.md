@@ -46,7 +46,7 @@ terraform/modules/render/
 
 ### API Key形式
 ```
-rnd_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+rnd_<your-render-api-key>
 ```
 
 ### 接続テスト
@@ -61,7 +61,7 @@ curl -H "Authorization: Bearer YOUR_API_KEY" \
 
 ```hcl
 # Render Configuration
-render_api_key     = "rnd_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+render_api_key     = "rnd_<your-render-api-key>"
 render_service_name = "english-cafe-api"
 
 # Email Configuration (バックエンド用)
@@ -78,7 +78,7 @@ app_secret_key = "your-secret-key-for-jwt-and-encryption"
 
 ```bash
 # セキュリティのため環境変数で管理
-export TF_VAR_render_api_key="rnd_XXXXXXXX"
+export TF_VAR_render_api_key="rnd_<your-render-api-key>"
 export TF_VAR_smtp_username="your-email@gmail.com"
 export TF_VAR_smtp_password="your-app-password"
 export TF_VAR_app_secret_key="your-secret-key"
@@ -295,7 +295,7 @@ database_plan   = "starter"  # $7/月
 ### API Key管理
 ```bash
 # 環境変数で管理（推奨）
-export TF_VAR_render_api_key="rnd_XXXXXXXX"
+export TF_VAR_render_api_key="rnd_<your-render-api-key>"
 
 # .gitignoreで除外
 echo "*.tfvars" >> .gitignore

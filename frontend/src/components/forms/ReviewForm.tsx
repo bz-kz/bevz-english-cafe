@@ -14,7 +14,7 @@ interface ReviewFormData {
   email: string;
   rating: number;
   comment: string;
-  lessonType: 'group' | 'private' | 'trial' | '';
+  lessonType: 'group' | 'private' | 'online' | 'trial' | 'business' | 'toeic' | 'other' | '';
   teacherName: string;
   course: string;
   studyPeriod: string;

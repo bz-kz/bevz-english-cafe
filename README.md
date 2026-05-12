@@ -108,10 +108,10 @@ npm run format
 
 ## 📊 アクセス情報
 
-- **フロントエンド**: http://localhost:3000
-- **バックエンドAPI**: http://localhost:8000
-- **API文書**: http://localhost:8000/docs
-- **PostgreSQL**: localhost:5432
+- **フロントエンド**: http://localhost:3010
+- **バックエンドAPI**: http://localhost:8010
+- **API文書**: http://localhost:8010/docs
+- **PostgreSQL**: localhost:5442
 
 ## 🧪 テスト
 
@@ -131,7 +131,7 @@ cd frontend && npm run test:e2e
 
 ## 📝 API仕様
 
-FastAPIの自動生成ドキュメント: http://localhost:8000/docs
+FastAPIの自動生成ドキュメント: http://localhost:8010/docs
 
 ## 🚀 デプロイ
 

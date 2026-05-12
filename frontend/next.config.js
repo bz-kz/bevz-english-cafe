@@ -1,3 +1,7 @@
+const withBundleAnalyzer = require('@next/bundle-analyzer')({
+  enabled: process.env.ANALYZE === 'true',
+});
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // 画像最適化設定（開発時は軽量化）
@@ -25,14 +29,23 @@ const nextConfig = {
         hostname: 'upload.wikimedia.org',
       },
     ],
-    formats: process.env.NODE_ENV === 'development' ? [] : ['image/webp', 'image/avif'],
-    deviceSizes: process.env.NODE_ENV === 'development' ? [640, 1080, 1920] : [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
-    imageSizes: process.env.NODE_ENV === 'development' ? [32, 64, 128] : [16, 32, 48, 64, 96, 128, 256, 384],
+    formats:
+      process.env.NODE_ENV === 'development'
+        ? []
+        : ['image/webp', 'image/avif'],
+    deviceSizes:
+      process.env.NODE_ENV === 'development'
+        ? [640, 1080, 1920]
+        : [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
+    imageSizes:
+      process.env.NODE_ENV === 'development'
+        ? [32, 64, 128]
+        : [16, 32, 48, 64, 96, 128, 256, 384],
     minimumCacheTTL: process.env.NODE_ENV === 'development' ? 0 : 60,
     dangerouslyAllowSVG: true,
     contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
   },
-  
+
   // 実験的機能の有効化
   experimental: {
     // optimizeCss: true, // Docker環境では無効化
@@ -49,25 +62,14 @@ const nextConfig = {
     //   },
     // },
   },
-  
+
   // コンパイラ最適化
   compiler: {
     removeConsole: process.env.NODE_ENV === 'production',
   },
-  
-  // バンドル分析
+
+  // バンドル分析は @next/bundle-analyzer ラッパーで実施（ANALYZE=true）
   webpack: (config, { buildId, dev, isServer, defaultLoaders, webpack }) => {
-    // Bundle Analyzer（開発時のみ）
-    if (process.env.ANALYZE === 'true') {
-      const { BundleAnalyzerPlugin } = require('webpack-bundle-analyzer');
-      config.plugins.push(
-        new BundleAnalyzerPlugin({
-          analyzerMode: 'server',
-          openAnalyzer: true,
-        })
-      );
-    }
-    
     // 開発時の最適化
     if (dev) {
       // 開発時のコンパイル速度向上
@@ -77,7 +79,7 @@ const nextConfig = {
         removeEmptyChunks: false,
         splitChunks: false,
       };
-      
+
       // 開発時のキャッシュ設定
       config.cache = {
         type: 'filesystem',
@@ -86,7 +88,7 @@ const nextConfig = {
         },
       };
     }
-    
+
     // 最適化設定
     if (!dev && !isServer) {
       config.optimization.splitChunks = {
@@ -120,29 +122,29 @@ const nextConfig = {
         },
       };
     }
-    
+
     return config;
   },
-  
+
   env: {
     NEXT_PUBLIC_API_URL:
-      process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
+      process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8010',
   },
-  
+
   // 開発サーバーの設定
   devIndicators: {
     buildActivity: false, // ビルドインジケーターを無効化
   },
-  
+
   // リクエスト処理の最適化
   onDemandEntries: {
     maxInactiveAge: 60 * 1000, // 1分
     pagesBufferLength: 2,
   },
-  
+
   // 開発時のCORS問題を解決
-  allowedDevOrigins: ['0.0.0.0:3000', 'localhost:3000'],
-  
+  allowedDevOrigins: ['0.0.0.0:3010', 'localhost:3010'],
+
   // 開発時のCORS設定を追加
   async headers() {
     return [
@@ -192,17 +194,17 @@ const nextConfig = {
       },
     ];
   },
-  
+
   // 本番ビルド用の設定
   output: 'standalone',
-  
+
   // パフォーマンス最適化
   poweredByHeader: false,
   generateEtags: true,
   compress: true,
 
   async rewrites() {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8010';
     return [
       {
         source: '/api/:path*',
@@ -212,4 +214,4 @@ const nextConfig = {
   },
 };
 
-module.exports = nextConfig;
+module.exports = withBundleAnalyzer(nextConfig);

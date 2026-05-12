@@ -30,6 +30,7 @@ backend/.venv/
 playwright-report/
 test-results/
 lighthouse-report.html
+frontend/coverage/
 
 # Bundle analyzer output (Stage D)
 .next/analyze/
@@ -37,3 +38,4 @@ lighthouse-report.html
 # Claude Code harness — never commit personal/runtime files
 .claude/settings.local.json
 .claude/worktrees/
+.claude/scheduled_tasks.lock

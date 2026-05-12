@@ -155,8 +155,8 @@ docker build -f frontend/Dockerfile.prod -t english-cafe-frontend:prod frontend/
 docker build -f backend/Dockerfile.prod -t english-cafe-backend:prod backend/
 
 # 本番用イメージ実行
-docker run -p 3000:3000 english-cafe-frontend:prod
-docker run -p 8000:8000 english-cafe-backend:prod
+docker run -p 3010:3010 english-cafe-frontend:prod
+docker run -p 8010:8010 english-cafe-backend:prod
 ```
 
 ## VS Code統合
@@ -219,9 +219,9 @@ npm run docker:build
 
 ```bash
 # 使用中のポート確認
-lsof -i :3000  # フロントエンド
-lsof -i :8000  # バックエンド
-lsof -i :5432  # PostgreSQL
+lsof -i :3010  # フロントエンド
+lsof -i :8010  # バックエンド
+lsof -i :5442  # PostgreSQL
 ```
 
 ### パフォーマンス最適化

@@ -48,8 +48,8 @@ cat > .env.local << EOF
 # ローカル開発用環境変数
 NODE_ENV=test
 PYTHON_ENV=test
-DATABASE_URL=postgresql://testuser:testpassword@localhost:5432/testdb
-CORS_ORIGINS=http://localhost:3000
+DATABASE_URL=postgresql://testuser:testpassword@localhost:5442/testdb
+CORS_ORIGINS=http://localhost:3010
 EOF
 
 cat > .secrets.local << EOF

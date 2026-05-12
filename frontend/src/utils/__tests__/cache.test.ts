@@ -1,364 +1,277 @@
 /**
  * Cache Utilities Tests
- * キャッシュユーティリティのユニットテスト
+ * `src/utils/cache.ts` の BrowserCache / PersistentCache / ImageCache /
+ * useCacheManager の挙動を検証する。
+ *
+ * 注意: 旧テストは存在しない API (`CacheManager`, `getCachedData` 等) を想定して
+ * いたため全面的に書き直している。プロダクションコードで実際に export されて
+ * いるシンボルだけを対象にする。
  */
 
-import { 
-  CacheManager, 
-  createCacheKey, 
-  getCachedData, 
-  setCachedData, 
-  clearCache,
-  CacheOptions 
+import {
+  BrowserCache,
+  PersistentCache,
+  APICache,
+  ImageCache,
+  useCacheManager,
 } from '../cache';
 
-// localStorage のモック
-const mockLocalStorage = {
-  getItem: jest.fn(),
-  setItem: jest.fn(),
-  removeItem: jest.fn(),
-  clear: jest.fn(),
-};
-
-Object.defineProperty(window, 'localStorage', {
-  value: mockLocalStorage,
-  writable: true,
-});
-
 describe('Cache Utilities', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    jest.spyOn(Date, 'now').mockReturnValue(1000000);
-  });
-
-  afterEach(() => {
-    jest.restoreAllMocks();
-  });
-
-  describe('createCacheKey', () => {
-    it('creates cache key from string', () => {
-      const key = createCacheKey('test-key');
-      expect(key).toBe('cache:test-key');
-    });
-
-    it('creates cache key from array', () => {
-      const key = createCacheKey(['user', '123', 'profile']);
-      expect(key).toBe('cache:user:123:profile');
-    });
-
-    it('creates cache key from object', () => {
-      const key = createCacheKey({ type: 'user', id: 123, action: 'get' });
-      expect(key).toBe('cache:type=user:id=123:action=get');
-    });
-
-    it('handles empty inputs', () => {
-      expect(createCacheKey('')).toBe('cache:');
-      expect(createCacheKey([])).toBe('cache:');
-      expect(createCacheKey({})).toBe('cache:');
-    });
-
-    it('handles special characters in keys', () => {
-      const key = createCacheKey('test/key:with-special_chars');
-      expect(key).toBe('cache:test/key:with-special_chars');
-    });
-  });
-
-  describe('getCachedData', () => {
-    it('retrieves valid cached data', () => {
-      const cachedItem = {
-        data: { name: 'John', age: 30 },
-        timestamp: 1000000,
-        ttl: 60000, // 1 minute
-      };
-      mockLocalStorage.getItem.mockReturnValue(JSON.stringify(cachedItem));
-
-      const result = getCachedData('test-key');
-
-      expect(mockLocalStorage.getItem).toHaveBeenCalledWith('cache:test-key');
-      expect(result).toEqual({ name: 'John', age: 30 });
-    });
-
-    it('returns null for expired data', () => {
-      const expiredItem = {
-        data: { name: 'John', age: 30 },
-        timestamp: 900000, // 100 seconds ago
-        ttl: 60000, // 1 minute TTL
-      };
-      mockLocalStorage.getItem.mockReturnValue(JSON.stringify(expiredItem));
-
-      const result = getCachedData('test-key');
-
-      expect(result).toBeNull();
-      expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('cache:test-key');
-    });
-
-    it('returns null for non-existent data', () => {
-      mockLocalStorage.getItem.mockReturnValue(null);
-
-      const result = getCachedData('non-existent-key');
-
-      expect(result).toBeNull();
-    });
-
-    it('handles invalid JSON gracefully', () => {
-      mockLocalStorage.getItem.mockReturnValue('invalid-json');
-
-      const result = getCachedData('invalid-key');
-
-      expect(result).toBeNull();
-    });
-
-    it('handles data without TTL (permanent cache)', () => {
-      const permanentItem = {
-        data: { permanent: true },
-        timestamp: 500000,
-        // no ttl property
-      };
-      mockLocalStorage.getItem.mockReturnValue(JSON.stringify(permanentItem));
-
-      const result = getCachedData('permanent-key');
-
-      expect(result).toEqual({ permanent: true });
-    });
-  });
-
-  describe('setCachedData', () => {
-    it('stores data with default TTL', () => {
-      const data = { name: 'Jane', age: 25 };
-      
-      setCachedData('test-key', data);
-
-      expect(mockLocalStorage.setItem).toHaveBeenCalledWith(
-        'cache:test-key',
-        JSON.stringify({
-          data,
-          timestamp: 1000000,
-          ttl: 300000, // default 5 minutes
-        })
-      );
-    });
-
-    it('stores data with custom TTL', () => {
-      const data = { name: 'Bob', age: 35 };
-      const options: CacheOptions = { ttl: 120000 }; // 2 minutes
-      
-      setCachedData('custom-ttl-key', data, options);
-
-      expect(mockLocalStorage.setItem).toHaveBeenCalledWith(
-        'cache:custom-ttl-key',
-        JSON.stringify({
-          data,
-          timestamp: 1000000,
-          ttl: 120000,
-        })
-      );
-    });
-
-    it('stores data without TTL (permanent)', () => {
-      const data = { permanent: true };
-      const options: CacheOptions = { ttl: null };
-      
-      setCachedData('permanent-key', data, options);
-
-      expect(mockLocalStorage.setItem).toHaveBeenCalledWith(
-        'cache:permanent-key',
-        JSON.stringify({
-          data,
-          timestamp: 1000000,
-        })
-      );
-    });
-
-    it('handles localStorage errors gracefully', () => {
-      mockLocalStorage.setItem.mockImplementation(() => {
-        throw new Error('Storage quota exceeded');
-      });
-
-      expect(() => setCachedData('error-key', { data: 'test' })).not.toThrow();
-    });
-
-    it('stores complex data structures', () => {
-      const complexData = {
-        users: [
-          { id: 1, name: 'Alice', preferences: { theme: 'dark' } },
-          { id: 2, name: 'Bob', preferences: { theme: 'light' } },
-        ],
-        metadata: {
-          total: 2,
-          lastUpdated: new Date().toISOString(),
-        },
-      };
-
-      setCachedData('complex-data', complexData);
-
-      expect(mockLocalStorage.setItem).toHaveBeenCalledWith(
-        'cache:complex-data',
-        JSON.stringify({
-          data: complexData,
-          timestamp: 1000000,
-          ttl: 300000,
-        })
-      );
-    });
-  });
-
-  describe('clearCache', () => {
-    it('clears specific cache entry', () => {
-      clearCache('specific-key');
-
-      expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('cache:specific-key');
-    });
-
-    it('clears all cache entries when no key provided', () => {
-      // localStorage.key() のモック
-      Object.defineProperty(mockLocalStorage, 'length', { value: 3 });
-      mockLocalStorage.key = jest.fn()
-        .mockReturnValueOnce('cache:key1')
-        .mockReturnValueOnce('other:key')
-        .mockReturnValueOnce('cache:key2');
-
-      clearCache();
-
-      expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('cache:key1');
-      expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('cache:key2');
-      expect(mockLocalStorage.removeItem).not.toHaveBeenCalledWith('other:key');
-    });
-
-    it('handles localStorage errors during clear', () => {
-      mockLocalStorage.removeItem.mockImplementation(() => {
-        throw new Error('Remove failed');
-      });
-
-      expect(() => clearCache('error-key')).not.toThrow();
-    });
-  });
-
-  describe('CacheManager', () => {
-    let cacheManager: CacheManager;
+  describe('BrowserCache', () => {
+    let cache: BrowserCache;
 
     beforeEach(() => {
-      cacheManager = new CacheManager('test-namespace');
+      cache = BrowserCache.getInstance();
+      cache.clear(); // シングルトンなのでテスト間で状態をリセット
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2024-01-01T00:00:00Z'));
     });
 
-    it('creates cache manager with namespace', () => {
-      expect(cacheManager).toBeInstanceOf(CacheManager);
+    afterEach(() => {
+      jest.useRealTimers();
     });
 
-    it('gets data with namespace', () => {
-      const cachedItem = {
-        data: { test: 'data' },
-        timestamp: 1000000,
-        ttl: 60000,
-      };
-      mockLocalStorage.getItem.mockReturnValue(JSON.stringify(cachedItem));
-
-      const result = cacheManager.get('test-key');
-
-      expect(mockLocalStorage.getItem).toHaveBeenCalledWith('cache:test-namespace:test-key');
-      expect(result).toEqual({ test: 'data' });
+    it('シングルトンとして同一インスタンスを返す', () => {
+      const a = BrowserCache.getInstance();
+      const b = BrowserCache.getInstance();
+      expect(a).toBe(b);
     });
 
-    it('sets data with namespace', () => {
-      const data = { namespace: 'test' };
-      
-      cacheManager.set('test-key', data);
-
-      expect(mockLocalStorage.setItem).toHaveBeenCalledWith(
-        'cache:test-namespace:test-key',
-        JSON.stringify({
-          data,
-          timestamp: 1000000,
-          ttl: 300000,
-        })
-      );
+    it('値を保存して取り出せる', () => {
+      cache.set('user', { id: 1 });
+      expect(cache.get('user')).toEqual({ id: 1 });
     });
 
-    it('clears data with namespace', () => {
-      cacheManager.clear('test-key');
-
-      expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('cache:test-namespace:test-key');
+    it('存在しないキーは null を返す', () => {
+      expect(cache.get('missing')).toBeNull();
     });
 
-    it('clears all data in namespace', () => {
-      Object.defineProperty(mockLocalStorage, 'length', { value: 4 });
-      mockLocalStorage.key = jest.fn()
-        .mockReturnValueOnce('cache:test-namespace:key1')
-        .mockReturnValueOnce('cache:other-namespace:key1')
-        .mockReturnValueOnce('cache:test-namespace:key2')
-        .mockReturnValueOnce('other:key');
+    it('TTL を過ぎたら null を返しキャッシュから削除する', () => {
+      cache.set('temp', 'value', 1); // 1 分 TTL
 
-      cacheManager.clearAll();
+      // 30 秒経過 → まだ生きている
+      jest.advanceTimersByTime(30 * 1000);
+      expect(cache.get('temp')).toBe('value');
 
-      expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('cache:test-namespace:key1');
-      expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('cache:test-namespace:key2');
-      expect(mockLocalStorage.removeItem).not.toHaveBeenCalledWith('cache:other-namespace:key1');
-      expect(mockLocalStorage.removeItem).not.toHaveBeenCalledWith('other:key');
+      // さらに 31 秒経過 → 失効
+      jest.advanceTimersByTime(31 * 1000);
+      expect(cache.get('temp')).toBeNull();
     });
 
-    it('checks if data exists in cache', () => {
-      mockLocalStorage.getItem.mockReturnValue(JSON.stringify({
-        data: { exists: true },
-        timestamp: 1000000,
-        ttl: 60000,
-      }));
-
-      const exists = cacheManager.has('existing-key');
-
-      expect(exists).toBe(true);
-      expect(mockLocalStorage.getItem).toHaveBeenCalledWith('cache:test-namespace:existing-key');
+    it('特定キーのみクリアできる', () => {
+      cache.set('a', 1);
+      cache.set('b', 2);
+      cache.clear('a');
+      expect(cache.get('a')).toBeNull();
+      expect(cache.get('b')).toBe(2);
     });
 
-    it('returns false for non-existent data', () => {
-      mockLocalStorage.getItem.mockReturnValue(null);
-
-      const exists = cacheManager.has('non-existent-key');
-
-      expect(exists).toBe(false);
+    it('引数なし clear で全消去できる', () => {
+      cache.set('a', 1);
+      cache.set('b', 2);
+      cache.clear();
+      expect(cache.get('a')).toBeNull();
+      expect(cache.get('b')).toBeNull();
     });
 
-    it('returns false for expired data', () => {
-      mockLocalStorage.getItem.mockReturnValue(JSON.stringify({
-        data: { expired: true },
-        timestamp: 900000,
-        ttl: 60000,
-      }));
+    it('cleanup() で期限切れエントリだけ削除する', () => {
+      cache.set('alive', 'ok', 10); // 10 分 TTL
+      cache.set('dead', 'old', 1); // 1 分 TTL
 
-      const exists = cacheManager.has('expired-key');
+      jest.advanceTimersByTime(2 * 60 * 1000); // 2 分後
+      cache.cleanup();
 
-      expect(exists).toBe(false);
+      expect(cache.get('alive')).toBe('ok');
+      expect(cache.get('dead')).toBeNull();
     });
   });
 
-  describe('Edge Cases and Error Handling', () => {
-    it('handles localStorage not available', () => {
-      const originalLocalStorage = window.localStorage;
-      // @ts-ignore
-      delete window.localStorage;
+  describe('PersistentCache', () => {
+    const PREFIX = 'english_cafe_';
 
-      expect(() => getCachedData('test')).not.toThrow();
-      expect(() => setCachedData('test', { data: 'test' })).not.toThrow();
-      expect(() => clearCache('test')).not.toThrow();
-
-      window.localStorage = originalLocalStorage;
+    beforeEach(() => {
+      localStorage.clear();
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2024-01-01T00:00:00Z'));
     });
 
-    it('handles circular references in data', () => {
-      const circularData: any = { name: 'test' };
-      circularData.self = circularData;
-
-      // JSON.stringify should handle this gracefully or throw
-      expect(() => setCachedData('circular', circularData)).not.toThrow();
+    afterEach(() => {
+      jest.useRealTimers();
     });
 
-    it('handles very large data', () => {
-      const largeData = {
-        items: Array(10000).fill(0).map((_, i) => ({
-          id: i,
-          data: `item-${i}`.repeat(100),
-        })),
-      };
+    it('値を localStorage に保存し prefix 付きで読み出せる', () => {
+      PersistentCache.set('profile', { name: 'Alice' });
 
-      expect(() => setCachedData('large-data', largeData)).not.toThrow();
+      const raw = localStorage.getItem(`${PREFIX}profile`);
+      expect(raw).not.toBeNull();
+      expect(JSON.parse(raw as string).data).toEqual({ name: 'Alice' });
+
+      expect(PersistentCache.get('profile')).toEqual({ name: 'Alice' });
+    });
+
+    it('TTL を過ぎたら null を返してエントリを削除する', () => {
+      PersistentCache.set('temp', 'val', 1); // 1 分
+
+      jest.advanceTimersByTime(2 * 60 * 1000);
+
+      expect(PersistentCache.get('temp')).toBeNull();
+      expect(localStorage.getItem(`${PREFIX}temp`)).toBeNull();
+    });
+
+    it('存在しないキーは null', () => {
+      expect(PersistentCache.get('nope')).toBeNull();
+    });
+
+    it('壊れた JSON は null を返し例外を投げない', () => {
+      localStorage.setItem(`${PREFIX}broken`, 'not-json');
+      expect(() => PersistentCache.get('broken')).not.toThrow();
+      expect(PersistentCache.get('broken')).toBeNull();
+    });
+
+    it('特定キーのみクリアできる', () => {
+      PersistentCache.set('a', 1);
+      PersistentCache.set('b', 2);
+      PersistentCache.clear('a');
+      expect(PersistentCache.get('a')).toBeNull();
+      expect(PersistentCache.get('b')).toBe(2);
+    });
+
+    it('引数なし clear は prefix 付きキーだけ削除し他は残す', () => {
+      PersistentCache.set('a', 1);
+      PersistentCache.set('b', 2);
+      localStorage.setItem('other_key', 'untouched');
+
+      PersistentCache.clear();
+
+      expect(PersistentCache.get('a')).toBeNull();
+      expect(PersistentCache.get('b')).toBeNull();
+      expect(localStorage.getItem('other_key')).toBe('untouched');
+    });
+
+    it('cleanup() は期限切れエントリだけ削除する', () => {
+      PersistentCache.set('alive', 'ok', 10);
+      PersistentCache.set('dead', 'old', 1);
+
+      jest.advanceTimersByTime(2 * 60 * 1000);
+      PersistentCache.cleanup();
+
+      expect(PersistentCache.get('alive')).toBe('ok');
+      expect(PersistentCache.get('dead')).toBeNull();
+    });
+  });
+
+  describe('ImageCache', () => {
+    // jsdom 環境では HTMLImageElement.onload は手動でトリガーする必要がある
+    beforeEach(() => {
+      // 既プリロード集合をリセットするため reload するわけにいかないので
+      // 各テストで一意な src を使う
+    });
+
+    it('preload は最初の呼び出しで Promise を返し、画像 onload で resolve する', async () => {
+      const src = `https://example.com/${Math.random()}.png`;
+
+      // Image の onload を即時発火させる
+      const originalImage = global.Image;
+      class FakeImage {
+        public onload: (() => void) | null = null;
+        public onerror: (() => void) | null = null;
+        set src(_v: string) {
+          // マイクロタスクで onload を呼ぶ
+          setTimeout(() => this.onload?.(), 0);
+        }
+      }
+      // @ts-expect-error jsdom override
+      global.Image = FakeImage;
+
+      await expect(ImageCache.preload(src)).resolves.toBeUndefined();
+      expect(ImageCache.isPreloaded(src)).toBe(true);
+
+      global.Image = originalImage;
+    });
+
+    it('preloadMultiple は配列分の Promise を解決する', async () => {
+      const originalImage = global.Image;
+      class FakeImage {
+        public onload: (() => void) | null = null;
+        public onerror: (() => void) | null = null;
+        set src(_v: string) {
+          setTimeout(() => this.onload?.(), 0);
+        }
+      }
+      // @ts-expect-error jsdom override
+      global.Image = FakeImage;
+
+      const sources = [
+        `https://example.com/multi-${Math.random()}-a.png`,
+        `https://example.com/multi-${Math.random()}-b.png`,
+      ];
+      const results = await ImageCache.preloadMultiple(sources);
+
+      expect(results).toHaveLength(2);
+      sources.forEach(s => expect(ImageCache.isPreloaded(s)).toBe(true));
+
+      global.Image = originalImage;
+    });
+  });
+
+  describe('useCacheManager', () => {
+    it('clearAllCaches と cleanupExpiredCaches を提供する', () => {
+      const { clearAllCaches, cleanupExpiredCaches } = useCacheManager();
+      expect(typeof clearAllCaches).toBe('function');
+      expect(typeof cleanupExpiredCaches).toBe('function');
+
+      // 例外なく実行できる
+      expect(() => clearAllCaches()).not.toThrow();
+      expect(() => cleanupExpiredCaches()).not.toThrow();
+    });
+  });
+
+  describe('APICache', () => {
+    let originalFetch: typeof global.fetch | undefined;
+
+    beforeEach(() => {
+      originalFetch = global.fetch;
+      // jsdom には fetch が無いので spy 用にダミー実装を仕込む
+      global.fetch = jest.fn() as unknown as typeof global.fetch;
+    });
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+      if (originalFetch) {
+        global.fetch = originalFetch;
+      } else {
+        // @ts-expect-error: jsdom restore
+        delete global.fetch;
+      }
+    });
+
+    it('fetchWithCache は初回 fetch し 2 回目はキャッシュから返す', async () => {
+      const mockResponse = { id: 1, value: 'cached' };
+      const fetchMock = global.fetch as jest.Mock;
+      fetchMock.mockResolvedValue({
+        ok: true,
+        json: async () => mockResponse,
+      });
+
+      const url = `/api/test-${Math.random()}`;
+      const first = await APICache.fetchWithCache(url);
+      const second = await APICache.fetchWithCache(url);
+
+      expect(first).toEqual(mockResponse);
+      expect(second).toEqual(mockResponse);
+      expect(fetchMock).toHaveBeenCalledTimes(1); // 2 回目はキャッシュヒット
+    });
+
+    it('レスポンスが ok でない場合は例外をスローする', async () => {
+      const fetchMock = global.fetch as jest.Mock;
+      fetchMock.mockResolvedValue({
+        ok: false,
+        status: 500,
+      });
+
+      await expect(
+        APICache.fetchWithCache(`/api/error-${Math.random()}`)
+      ).rejects.toThrow();
     });
   });
 });

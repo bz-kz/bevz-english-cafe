@@ -6,7 +6,7 @@
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 
 // API設定
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8010';
 const API_TIMEOUT = 30000; // 30秒
 
 // Axiosインスタンスの作成
@@ -15,25 +15,26 @@ const apiClient: AxiosInstance = axios.create({
   timeout: API_TIMEOUT,
   headers: {
     'Content-Type': 'application/json',
-    'Accept': 'application/json',
+    Accept: 'application/json',
   },
 });
 
 // リクエストインターセプター
 apiClient.interceptors.request.use(
-  (config) => {
+  config => {
     // リクエスト送信前の処理
     console.log(`API Request: ${config.method?.toUpperCase()} ${config.url}`);
-    
+
     // 認証トークンがある場合は追加
-    const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+    const token =
+      typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
-    
+
     return config;
   },
-  (error) => {
+  error => {
     console.error('API Request Error:', error);
     return Promise.reject(error);
   }
@@ -46,14 +47,14 @@ apiClient.interceptors.response.use(
     console.log(`API Response: ${response.status} ${response.config.url}`);
     return response;
   },
-  (error) => {
+  error => {
     // レスポンスエラー時の処理
     console.error('API Response Error:', error);
-    
+
     if (error.response) {
       // サーバーからのエラーレスポンス
       const { status, data } = error.response;
-      
+
       switch (status) {
         case 401:
           // 認証エラー
@@ -81,18 +82,20 @@ apiClient.interceptors.response.use(
         default:
           console.error(`HTTP Error ${status}:`, data);
       }
-      
+
       // エラーメッセージを統一形式で返す
-      const errorMessage = data?.message || data?.error || `HTTP Error ${status}`;
+      const errorMessage =
+        data?.message || data?.error || `HTTP Error ${status}`;
       error.message = errorMessage;
     } else if (error.request) {
       // ネットワークエラー
-      error.message = 'ネットワークエラーが発生しました。インターネット接続を確認してください。';
+      error.message =
+        'ネットワークエラーが発生しました。インターネット接続を確認してください。';
     } else {
       // その他のエラー
       error.message = '予期しないエラーが発生しました。';
     }
-    
+
     return Promise.reject(error);
   }
 );
@@ -122,37 +125,59 @@ export interface ContactFormData {
 // 汎用API関数
 export const api = {
   // GET リクエスト
-  get: async <T = any>(url: string, config?: AxiosRequestConfig): Promise<T> => {
+  get: async <T = any>(
+    url: string,
+    config?: AxiosRequestConfig
+  ): Promise<T> => {
     const response = await apiClient.get<ApiResponse<T>>(url, config);
     return response.data.data;
   },
 
   // POST リクエスト
-  post: async <T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> => {
+  post: async <T = any>(
+    url: string,
+    data?: any,
+    config?: AxiosRequestConfig
+  ): Promise<T> => {
     const response = await apiClient.post<ApiResponse<T>>(url, data, config);
     return response.data.data;
   },
 
   // PUT リクエスト
-  put: async <T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> => {
+  put: async <T = any>(
+    url: string,
+    data?: any,
+    config?: AxiosRequestConfig
+  ): Promise<T> => {
     const response = await apiClient.put<ApiResponse<T>>(url, data, config);
     return response.data.data;
   },
 
   // PATCH リクエスト
-  patch: async <T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> => {
+  patch: async <T = any>(
+    url: string,
+    data?: any,
+    config?: AxiosRequestConfig
+  ): Promise<T> => {
     const response = await apiClient.patch<ApiResponse<T>>(url, data, config);
     return response.data.data;
   },
 
   // DELETE リクエスト
-  delete: async <T = any>(url: string, config?: AxiosRequestConfig): Promise<T> => {
+  delete: async <T = any>(
+    url: string,
+    config?: AxiosRequestConfig
+  ): Promise<T> => {
     const response = await apiClient.delete<ApiResponse<T>>(url, config);
     return response.data.data;
   },
 
   // ファイルアップロード
-  upload: async <T = any>(url: string, file: File, onProgress?: (progress: number) => void): Promise<T> => {
+  upload: async <T = any>(
+    url: string,
+    file: File,
+    onProgress?: (progress: number) => void
+  ): Promise<T> => {
     const formData = new FormData();
     formData.append('file', file);
 
@@ -160,9 +185,11 @@ export const api = {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
-      onUploadProgress: (progressEvent) => {
+      onUploadProgress: progressEvent => {
         if (onProgress && progressEvent.total) {
-          const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          const progress = Math.round(
+            (progressEvent.loaded * 100) / progressEvent.total
+          );
           onProgress(progress);
         }
       },
@@ -184,9 +211,9 @@ export const contactApi = {
       return { success: true, data: response.data };
     } catch (error: any) {
       console.error('Health check failed:', error);
-      return { 
-        success: false, 
-        error: error.message || 'API接続に失敗しました' 
+      return {
+        success: false,
+        error: error.message || 'API接続に失敗しました',
       };
     }
   },
@@ -208,16 +235,16 @@ export const contactApi = {
           phone: contactData.phone,
           lesson_type: contactData.lessonType,
           preferred_contact: contactData.preferredContact,
-          message: contactData.message
+          message: contactData.message,
         });
         return {
           success: response.success,
           message: response.message,
           id: response.data.id,
-          timestamp: response.data.createdAt
+          timestamp: response.data.createdAt,
         };
       }
-      
+
       // フィールド名をバックエンド形式に変換
       const backendData = {
         name: contactData.name,
@@ -225,21 +252,24 @@ export const contactApi = {
         phone: contactData.phone,
         lesson_type: contactData.lessonType,
         preferred_contact: contactData.preferredContact,
-        message: contactData.message
+        message: contactData.message,
       };
-      
+
       const response = await apiClient.post('/api/v1/contacts/', backendData);
-      return { 
-        success: true, 
+      return {
+        success: true,
         message: response.data.message || 'お問い合わせを受け付けました',
         id: response.data.contact_id,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
     } catch (error: any) {
       console.error('Contact submission failed:', error);
       return {
         success: false,
-        error: error.response?.data?.detail || error.message || 'お問い合わせの送信に失敗しました'
+        error:
+          error.response?.data?.detail ||
+          error.message ||
+          'お問い合わせの送信に失敗しました',
       };
     }
   },
@@ -258,22 +288,30 @@ export const contactApi = {
         const response = await mockApi.submitContact(contactData);
         return response.data;
       }
-      
+
       const response = await apiClient.post('/api/v1/contacts/', contactData);
-      return { 
-        success: true, 
+      return {
+        success: true,
         message: response.data.message,
         id: response.data.contact_id,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
     } catch (error: any) {
       console.error('Contact submission failed:', error);
-      throw new Error(error.response?.data?.detail || error.message || 'お問い合わせの送信に失敗しました');
+      throw new Error(
+        error.response?.data?.detail ||
+          error.message ||
+          'お問い合わせの送信に失敗しました'
+      );
     }
   },
 
   // 問い合わせ一覧取得（管理者用）
-  getAll: async (params?: { page?: number; limit?: number; status?: string }) => {
+  getAll: async (params?: {
+    page?: number;
+    limit?: number;
+    status?: string;
+  }) => {
     if (USE_MOCK_API) {
       const response = await mockApi.getContacts(params);
       return response.data;

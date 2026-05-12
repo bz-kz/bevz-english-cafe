@@ -1,296 +1,160 @@
 /**
  * API Library Tests
  * APIライブラリのユニットテスト
+ *
+ * `contactApi.submit` と `contactApi.submitContact` の挙動を axios インスタンスを
+ * モックして検証する。バックエンド `/api/v1/contacts/` への POST と
+ * snake_case ペイロード (`lesson_type` / `preferred_contact`) を期待する。
  */
 
 import { contactApi } from '../api';
+import apiClient from '../api';
+import { mockApi, USE_MOCK_API } from '../mock-api';
 
-// fetchのモック
-global.fetch = jest.fn();
-const mockFetch = fetch as jest.MockedFunction<typeof fetch>;
+jest.mock('../mock-api', () => ({
+  USE_MOCK_API: false,
+  mockApi: {
+    submitContact: jest.fn(),
+  },
+}));
 
 describe('API Library', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  describe('contactApi', () => {
-    describe('submitContact', () => {
-      const mockContactData = {
+  describe('contactApi.submit (camelCase 入力)', () => {
+    const inputData = {
+      name: '山田太郎',
+      email: 'yamada@example.com',
+      phone: '090-1234-5678',
+      message: 'テストメッセージ',
+      lessonType: 'group',
+      preferredContact: 'email',
+    };
+
+    it('snake_case に変換してバックエンドへ POST する', async () => {
+      const postSpy = jest.spyOn(apiClient, 'post').mockResolvedValueOnce({
+        data: { contact_id: 'abc123', message: 'お問い合わせを受け付けました' },
+      } as any);
+
+      const result = await contactApi.submit(inputData);
+
+      expect(postSpy).toHaveBeenCalledWith('/api/v1/contacts/', {
         name: '山田太郎',
         email: 'yamada@example.com',
         phone: '090-1234-5678',
+        lesson_type: 'group',
+        preferred_contact: 'email',
         message: 'テストメッセージ',
-        lessonType: 'group' as const,
-        preferredContact: 'email' as const,
-      };
+      });
+      expect(result.success).toBe(true);
+      expect(result.id).toBe('abc123');
+      expect(result.message).toBe('お問い合わせを受け付けました');
+    });
 
-      it('submits contact form successfully', async () => {
-        const mockResponse = {
-          success: true,
-          message: 'Contact submitted successfully',
-        };
-
-        mockFetch.mockResolvedValueOnce({
-          ok: true,
-          json: async () => mockResponse,
-        } as Response);
-
-        const result = await contactApi.submitContact(mockContactData);
-
-        expect(mockFetch).toHaveBeenCalledWith('/api/contact', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(mockContactData),
-        });
-
-        expect(result).toEqual({
-          success: true,
-          message: 'Contact submitted successfully',
-        });
+    it('axios エラー時に success: false と error メッセージを返す', async () => {
+      const postSpy = jest.spyOn(apiClient, 'post').mockRejectedValueOnce({
+        response: { data: { detail: 'Validation failed' } },
+        message: 'Request failed',
       });
 
-      it('handles API error response', async () => {
-        const mockErrorResponse = {
-          success: false,
-          error: 'Validation failed',
-        };
+      const result = await contactApi.submit(inputData);
 
-        mockFetch.mockResolvedValueOnce({
-          ok: false,
-          status: 400,
-          json: async () => mockErrorResponse,
-        } as Response);
+      expect(postSpy).toHaveBeenCalled();
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Validation failed');
+    });
 
-        const result = await contactApi.submitContact(mockContactData);
-
-        expect(result).toEqual({
-          success: false,
-          error: 'Validation failed',
-        });
+    it('ネットワークエラー時に汎用エラーメッセージへフォールバックする', async () => {
+      jest.spyOn(apiClient, 'post').mockRejectedValueOnce({
+        message: 'Network Error',
       });
 
-      it('handles network error', async () => {
-        mockFetch.mockRejectedValueOnce(new Error('Network error'));
+      const result = await contactApi.submit(inputData);
 
-        const result = await contactApi.submitContact(mockContactData);
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Network Error');
+    });
 
-        expect(result).toEqual({
-          success: false,
-          error: 'Network error',
-        });
-      });
+    it('複数の lessonType を扱える', async () => {
+      const lessonTypes = ['group', 'private', 'trial', 'other'] as const;
+      const postSpy = jest.spyOn(apiClient, 'post').mockResolvedValue({
+        data: { contact_id: 'id', message: 'ok' },
+      } as any);
 
-      it('handles non-JSON response', async () => {
-        mockFetch.mockResolvedValueOnce({
-          ok: false,
-          status: 500,
-          json: async () => {
-            throw new Error('Invalid JSON');
-          },
-        } as Response);
+      for (const lessonType of lessonTypes) {
+        await contactApi.submit({ ...inputData, lessonType });
+      }
 
-        const result = await contactApi.submitContact(mockContactData);
+      expect(postSpy).toHaveBeenCalledTimes(lessonTypes.length);
+      // 最後の呼び出しが snake_case の lesson_type を含むことを確認
+      const lastCall = postSpy.mock.calls[postSpy.mock.calls.length - 1];
+      expect(lastCall?.[1]).toMatchObject({ lesson_type: 'other' });
+    });
 
-        expect(result).toEqual({
-          success: false,
-          error: 'サーバーエラーが発生しました',
-        });
-      });
+    it('複数の preferredContact を扱える', async () => {
+      const methods = [
+        'email',
+        'phone',
+        'line',
+        'facebook',
+        'instagram',
+      ] as const;
+      const postSpy = jest.spyOn(apiClient, 'post').mockResolvedValue({
+        data: { contact_id: 'id', message: 'ok' },
+      } as any);
 
-      it('validates required fields', async () => {
-        const invalidData = {
-          name: '',
-          email: 'invalid-email',
-          phone: '',
-          message: '',
-          lessonType: '' as const,
-          preferredContact: 'email' as const,
-        };
+      for (const preferredContact of methods) {
+        await contactApi.submit({ ...inputData, preferredContact });
+      }
 
-        // APIが呼ばれる前にクライアント側でバリデーションされることを想定
-        // 実際の実装では、フォームコンポーネント側でバリデーションが行われる
-        expect(invalidData.name).toBe('');
-        expect(invalidData.message).toBe('');
-      });
-
-      it('handles different lesson types', async () => {
-        const lessonTypes = ['group', 'private', 'trial', 'other'] as const;
-
-        for (const lessonType of lessonTypes) {
-          const dataWithLessonType = {
-            ...mockContactData,
-            lessonType,
-          };
-
-          mockFetch.mockResolvedValueOnce({
-            ok: true,
-            json: async () => ({ success: true }),
-          } as Response);
-
-          await contactApi.submitContact(dataWithLessonType);
-
-          expect(mockFetch).toHaveBeenCalledWith('/api/contact', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(dataWithLessonType),
-          });
-        }
-      });
-
-      it('handles different contact preferences', async () => {
-        const contactMethods = ['email', 'phone', 'line', 'facebook', 'instagram'] as const;
-
-        for (const preferredContact of contactMethods) {
-          const dataWithContactMethod = {
-            ...mockContactData,
-            preferredContact,
-          };
-
-          mockFetch.mockResolvedValueOnce({
-            ok: true,
-            json: async () => ({ success: true }),
-          } as Response);
-
-          await contactApi.submitContact(dataWithContactMethod);
-
-          expect(mockFetch).toHaveBeenCalledWith('/api/contact', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(dataWithContactMethod),
-          });
-        }
-      });
-
-      it('handles timeout scenarios', async () => {
-        // タイムアウトをシミュレート
-        mockFetch.mockImplementationOnce(
-          () => new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Request timeout')), 100)
-          )
-        );
-
-        const result = await contactApi.submitContact(mockContactData);
-
-        expect(result).toEqual({
-          success: false,
-          error: 'Request timeout',
-        });
-      });
-
-      it('handles malformed response data', async () => {
-        mockFetch.mockResolvedValueOnce({
-          ok: true,
-          json: async () => null, // 不正なレスポンス
-        } as Response);
-
-        const result = await contactApi.submitContact(mockContactData);
-
-        // nullレスポンスでも適切に処理される
-        expect(result).toEqual(null);
-      });
-
-      it('sends correct content type header', async () => {
-        mockFetch.mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true }),
-        } as Response);
-
-        await contactApi.submitContact(mockContactData);
-
-        expect(mockFetch).toHaveBeenCalledWith(
-          expect.any(String),
-          expect.objectContaining({
-            headers: expect.objectContaining({
-              'Content-Type': 'application/json',
-            }),
-          })
-        );
-      });
-
-      it('uses POST method', async () => {
-        mockFetch.mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true }),
-        } as Response);
-
-        await contactApi.submitContact(mockContactData);
-
-        expect(mockFetch).toHaveBeenCalledWith(
-          expect.any(String),
-          expect.objectContaining({
-            method: 'POST',
-          })
-        );
-      });
-
-      it('serializes data correctly', async () => {
-        mockFetch.mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true }),
-        } as Response);
-
-        await contactApi.submitContact(mockContactData);
-
-        expect(mockFetch).toHaveBeenCalledWith(
-          expect.any(String),
-          expect.objectContaining({
-            body: JSON.stringify(mockContactData),
-          })
-        );
-      });
+      expect(postSpy).toHaveBeenCalledTimes(methods.length);
+      const lastCall = postSpy.mock.calls[postSpy.mock.calls.length - 1];
+      expect(lastCall?.[1]).toMatchObject({ preferred_contact: 'instagram' });
     });
   });
 
-  describe('Error Handling', () => {
-    it('handles fetch not available', async () => {
-      const originalFetch = global.fetch;
-      // @ts-ignore
-      delete global.fetch;
+  describe('contactApi.submitContact (snake_case 入力 / 例外スロー版)', () => {
+    const snakePayload = {
+      name: '田中花子',
+      email: 'tanaka@example.com',
+      phone: '080-0000-0000',
+      message: '別のテストメッセージ',
+      lesson_type: 'trial',
+      preferred_contact: 'email',
+    };
 
-      try {
-        await contactApi.submitContact({
-          name: 'Test',
-          email: 'test@example.com',
-          phone: '',
-          message: 'Test message',
-          lessonType: 'group',
-          preferredContact: 'email',
-        });
-      } catch (error) {
-        expect(error).toBeDefined();
-      }
+    it('そのまま snake_case で POST する', async () => {
+      const postSpy = jest.spyOn(apiClient, 'post').mockResolvedValueOnce({
+        data: { contact_id: 'xyz789', message: 'ok' },
+      } as any);
 
-      global.fetch = originalFetch;
+      const result = (await contactApi.submitContact(snakePayload)) as {
+        success: boolean;
+        id: string;
+      };
+
+      expect(postSpy).toHaveBeenCalledWith('/api/v1/contacts/', snakePayload);
+      expect(result.success).toBe(true);
+      expect(result.id).toBe('xyz789');
     });
 
-    it('handles AbortController scenarios', async () => {
-      const controller = new AbortController();
-      
-      mockFetch.mockRejectedValueOnce(new Error('AbortError'));
-
-      // リクエストを中断
-      controller.abort();
-
-      const result = await contactApi.submitContact({
-        name: 'Test',
-        email: 'test@example.com',
-        phone: '',
-        message: 'Test message',
-        lessonType: 'group',
-        preferredContact: 'email',
+    it('エラー時は例外をスローする', async () => {
+      jest.spyOn(apiClient, 'post').mockRejectedValueOnce({
+        response: { data: { detail: 'Server error' } },
       });
 
-      expect(result).toEqual({
-        success: false,
-        error: 'AbortError',
-      });
+      await expect(contactApi.submitContact(snakePayload)).rejects.toThrow(
+        'Server error'
+      );
     });
+  });
+
+  // mockApi を有効化したケースは USE_MOCK_API が compile-time const のため
+  // 個別テストで toggle できない。USE_MOCK_API=false 経路のみカバーする。
+  it('mock-api モジュールが import 可能であること（smoke）', () => {
+    expect(USE_MOCK_API).toBe(false);
+    expect(mockApi).toBeDefined();
   });
 });

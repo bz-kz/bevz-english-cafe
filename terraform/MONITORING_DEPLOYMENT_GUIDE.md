@@ -59,7 +59,7 @@ application_name = "english-cafe-prod"
 # New Relic Configuration
 newrelic_account_id  = "1234567"  # New Relic Account ID
 newrelic_api_key     = "NRAK-XXXXX"  # New Relic User API Key
-newrelic_license_key = "eu01xxXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXNRAL"  # New Relic License Key
+newrelic_license_key = "eu01xx<your-newrelic-license-key>NRAL"  # New Relic License Key
 
 # Grafana Configuration
 grafana_url                  = "https://your-org.grafana.net"
@@ -74,13 +74,13 @@ custom_domain       = "english-cafe.com"  # Optional
 
 # Render Configuration
 render_service_name = "english-cafe-api"
-render_api_key     = "rnd_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+render_api_key     = "rnd_<your-render-api-key>"
 
 # GitHub Configuration
 github_repository = "your-org/english-cafe-website"
 
 # Notification Configuration
-slack_webhook_url = "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK"
+slack_webhook_url = "https://hooks.slack.com/services/<your-slack-team>/<your-slack-channel>/<your-webhook-secret>"
 admin_email      = "admin@english-cafe.com"
 
 # Email Configuration (for backend)

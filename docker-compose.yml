@@ -6,15 +6,15 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     ports:
-      - "3000:3000"
+      - "3010:3010"
     volumes:
       - ./frontend:/app
       - /app/node_modules
       - /app/.next
     environment:
       - NODE_ENV=development
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
-      - BACKEND_URL=http://backend:8000
+      - NEXT_PUBLIC_API_URL=http://localhost:8010
+      - BACKEND_URL=http://backend:8010
     depends_on:
       - backend
 
@@ -23,20 +23,20 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     ports:
-      - "8000:8000"
+      - "8010:8010"
     volumes:
       - ./backend:/app
     environment:
       - DATABASE_URL=postgresql://postgres:password@postgres:5432/english_cafe_db
       - ENVIRONMENT=development
-      - CORS_ORIGINS=http://localhost:3000
+      - CORS_ORIGINS=http://localhost:3010
     depends_on:
       - postgres
 
   postgres:
     image: postgres:15-alpine
     ports:
-      - "5432:5432"
+      - "5442:5432"
     environment:
       - POSTGRES_DB=english_cafe_db
       - POSTGRES_USER=postgres

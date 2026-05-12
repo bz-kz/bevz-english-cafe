@@ -1,16 +1,18 @@
 """Tests for SQLAlchemy Contact Repository."""
 
-import pytest
 from uuid import uuid4
-from datetime import datetime
 
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.domain.entities.contact import Contact, ContactStatus, LessonType, PreferredContact
+from app.domain.entities.contact import Contact
+from app.domain.enums.contact import ContactStatus, LessonType, PreferredContact
 from app.domain.value_objects.email import Email
 from app.domain.value_objects.phone import Phone
-from app.infrastructure.repositories.sqlalchemy_contact_repository import SQLAlchemyContactRepository
 from app.infrastructure.database.models.contact import ContactModel
+from app.infrastructure.repositories.sqlalchemy_contact_repository import (
+    SQLAlchemyContactRepository,
+)
 
 
 class TestSQLAlchemyContactRepository:
@@ -31,7 +33,7 @@ class TestSQLAlchemyContactRepository:
             phone=Phone("090-1234-5678"),
             message="英会話レッスンについて質問があります。",
             lesson_type=LessonType.TRIAL,
-            preferred_contact=PreferredContact.EMAIL
+            preferred_contact=PreferredContact.EMAIL,
         )
 
     async def test_save_new_contact(self, repository, sample_contact, async_session):
@@ -55,7 +57,9 @@ class TestSQLAlchemyContactRepository:
         assert db_contact is not None
         assert db_contact.name == sample_contact.name
 
-    async def test_save_existing_contact(self, repository, sample_contact, async_session):
+    async def test_save_existing_contact(
+        self, repository, sample_contact, async_session
+    ):
         """Test updating an existing contact."""
         # Arrange - save initial contact
         await repository.save(sample_contact)
@@ -79,8 +83,8 @@ class TestSQLAlchemyContactRepository:
         assert db_contact.status == ContactStatus.COMPLETED.value
 
     async def test_find_by_id_existing(self, repository, sample_contact, async_session):
-        """Test finding an existing contact by ID."""     
-   # Arrange
+        """Test finding an existing contact by ID."""
+        # Arrange
         await repository.save(sample_contact)
         await async_session.commit()
 
@@ -101,7 +105,9 @@ class TestSQLAlchemyContactRepository:
         # Assert
         assert found_contact is None
 
-    async def test_find_by_email_existing(self, repository, sample_contact, async_session):
+    async def test_find_by_email_existing(
+        self, repository, sample_contact, async_session
+    ):
         """Test finding an existing contact by email."""
         # Arrange
         await repository.save(sample_contact)
@@ -134,7 +140,7 @@ class TestSQLAlchemyContactRepository:
                 email=Email(f"test{i}@example.com"),
                 message=f"テストメッセージ{i}",
                 lesson_type=LessonType.GROUP,
-                preferred_contact=PreferredContact.EMAIL
+                preferred_contact=PreferredContact.EMAIL,
             )
             contacts.append(contact)
             await repository.save(contact)
@@ -149,7 +155,9 @@ class TestSQLAlchemyContactRepository:
         for contact in found_contacts:
             assert contact.name.startswith("テストユーザー")
 
-    async def test_delete_existing_contact(self, repository, sample_contact, async_session):
+    async def test_delete_existing_contact(
+        self, repository, sample_contact, async_session
+    ):
         """Test deleting an existing contact."""
         # Arrange
         await repository.save(sample_contact)
@@ -184,7 +192,7 @@ class TestSQLAlchemyContactRepository:
                 email=Email(f"count{i}@example.com"),
                 message="カウントテスト",
                 lesson_type=LessonType.GROUP,
-                preferred_contact=PreferredContact.EMAIL
+                preferred_contact=PreferredContact.EMAIL,
             )
             await repository.save(contact)
         await async_session.commit()
@@ -205,7 +213,7 @@ class TestSQLAlchemyContactRepository:
             phone=None,
             message="電話番号なしのテスト",
             lesson_type=LessonType.GROUP,
-            preferred_contact=PreferredContact.EMAIL
+            preferred_contact=PreferredContact.EMAIL,
         )
 
         # Act

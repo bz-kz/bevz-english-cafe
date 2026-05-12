@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --hostname 0.0.0.0 --port 3000",
+    "dev": "next dev --hostname 0.0.0.0 --port 3010",
     "build": "next build",
     "build:analyze": "ANALYZE=true next build",
     "start": "next start",
@@ -18,7 +18,7 @@
     "test:integration:ci": "jest --config jest.integration.config.js --ci --coverage --watchAll=false",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "lighthouse": "lighthouse http://localhost:3000 --output html --output-path ./lighthouse-report.html",
+    "lighthouse": "lighthouse http://localhost:3010 --output html --output-path ./lighthouse-report.html",
     "perf:audit": "npm run build && npm run lighthouse"
   },
   "dependencies": {
@@ -34,14 +34,17 @@
     "tailwind-merge": "^3.3.1",
     "tailwindcss": "^3.3.6",
     "web-vitals": "^3.5.0",
+    "zod": "^3.25.76",
     "zustand": "^4.5.7"
   },
   "devDependencies": {
+    "@next/bundle-analyzer": "^16.2.6",
     "@playwright/test": "^1.40.1",
     "@testing-library/jest-dom": "^6.1.6",
     "@testing-library/react": "^14.1.2",
     "@testing-library/user-event": "^14.5.1",
     "@types/dompurify": "^3.0.5",
+    "@types/jest": "^29.5.14",
     "@types/node": "24.3.3",
     "@types/react": "^18.2.45",
     "@types/react-dom": "^18.2.18",
@@ -57,8 +60,7 @@
     "playwright": "^1.40.1",
     "prettier": "^3.1.1",
     "prettier-plugin-tailwindcss": "^0.5.9",
-    "typescript": "5.9.2",
-    "webpack-bundle-analyzer": "^4.10.1"
+    "typescript": "5.9.2"
   },
   "lint-staged": {
     "*.{js,jsx,ts,tsx}": [

@@ -9,7 +9,7 @@
 **Tech Stack:**
 - Terraform `>= 1.6`
 - Terragrunt `>= 0.55`
-- Vercel Terraform provider (latest 2.x — pinned at implementation time via context7)
+- Vercel Terraform provider `~> 4.0` (current major series, confirmed via context7)
 - HCP Terraform (Terraform Cloud) free plan for remote state + variable storage
 
 **Source spec:** `docs/superpowers/specs/2026-05-13-vercel-frontend-terraform-design.md`
@@ -110,7 +110,7 @@ terraform {
   required_providers {
     vercel = {
       source  = "vercel/vercel"
-      version = "~> 2.0" # confirm via Task 2; update if different
+      version = "~> 4.0" # confirmed via context7 (current major series 4.x, official docs show >= 4.8)
     }
   }
 }

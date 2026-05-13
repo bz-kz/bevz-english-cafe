@@ -32,5 +32,10 @@ RUN uv sync --frozen --no-dev
 RUN chown -R appuser:appuser /app
 USER appuser
 
+# Add the project's venv to PATH so `uvicorn` resolves without uv at runtime.
+# `uv run` is avoided because the system `appuser` (created via `useradd -r`) has no
+# home directory and so cannot create the uv cache at /home/appuser/.cache/uv.
+ENV PATH="/app/.venv/bin:${PATH}"
+
 # `sh -c` so $PORT expands at runtime (Cloud Run sets it; defaults to 8080 above for local).
-CMD ["sh", "-c", "uv run uvicorn app.main:app --host 0.0.0.0 --port ${PORT}"]
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT}"]

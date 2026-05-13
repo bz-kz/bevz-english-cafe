@@ -5,7 +5,6 @@ description = "英会話カフェWebサイトのバックエンドAPI"
 authors = [
     {name = "English Cafe Team"}
 ]
-readme = "../README.md"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi==0.104.1",

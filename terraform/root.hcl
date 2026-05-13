@@ -3,29 +3,31 @@
 
 locals {
   env_vars     = read_terragrunt_config(find_in_parent_folders("env.hcl"))
-  organization = get_env("HCP_TF_ORGANIZATION")
+  organization = local.env_vars.locals.hcp_organization
   project_slug = "english-cafe"
 
-  # Stack name is derived from path under envs/<env>/, e.g. "vercel".
-  stack_name = replace(path_relative_to_include(), "/", "-")
+  # Stack name is the leaf dir under envs/<env>/, e.g. "vercel" or "cloudrun".
+  stack_name     = basename(get_terragrunt_dir())
+  workspace_name = "${local.project_slug}-${local.env_vars.locals.environment}-${local.stack_name}"
 }
 
-remote_state {
-  backend = "remote"
-
-  generate = {
-    path      = "backend.tf"
-    if_exists = "overwrite"
-  }
-
-  config = {
+# Use the HCP Terraform `cloud {}` block (not `backend "remote"`) since the
+# Terragrunt `remote_state` generator emits `workspaces = {}` as a map, which
+# newer Terraform rejects for the remote backend.
+generate "backend" {
+  path      = "backend.tf"
+  if_exists = "overwrite"
+  contents  = <<EOF
+terraform {
+  cloud {
     hostname     = "app.terraform.io"
-    organization = local.organization
-
-    workspaces = {
-      name = "${local.project_slug}-${local.env_vars.locals.environment}-${local.stack_name}"
+    organization = "${local.organization}"
+    workspaces {
+      name = "${local.workspace_name}"
     }
   }
+}
+EOF
 }
 
 generate "provider" {

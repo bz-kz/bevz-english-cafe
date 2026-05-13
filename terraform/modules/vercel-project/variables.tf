@@ -32,10 +32,16 @@ variable "production_branch" {
   description = "Git branch that triggers production deployments."
 }
 
-variable "custom_domain" {
+variable "frontend_domain" {
   type        = string
   default     = ""
-  description = "Custom domain to bind to this project. Empty string skips the domain resource."
+  description = "Custom domain to bind to this Vercel project. Empty string skips the domain resource."
+}
+
+variable "serverless_function_region" {
+  type        = string
+  default     = "sfo1"
+  description = "Vercel serverless function deployment region (e.g. sfo1, hnd1, iad1)."
 }
 
 variable "env_vars" {

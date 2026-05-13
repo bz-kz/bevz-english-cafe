@@ -13,6 +13,21 @@ resource "vercel_project" "this" {
     repo              = var.github_repo
     production_branch = var.production_branch
   }
+
+  # `function_default_regions` replaces the deprecated `serverless_function_region`.
+  # The other resource_config sub-fields (fluid, cpu type, timeout) are computed
+  # server-side and we don't want to manage them — they live in the Vercel UI.
+  resource_config = {
+    function_default_regions = [var.serverless_function_region]
+  }
+
+  lifecycle {
+    ignore_changes = [
+      resource_config.fluid,
+      resource_config.function_default_cpu_type,
+      resource_config.function_default_timeout,
+    ]
+  }
 }
 
 resource "vercel_project_environment_variable" "this" {
@@ -27,9 +42,9 @@ resource "vercel_project_environment_variable" "this" {
 }
 
 resource "vercel_project_domain" "this" {
-  count = var.custom_domain != "" ? 1 : 0
+  count = var.frontend_domain != "" ? 1 : 0
 
   project_id = vercel_project.this.id
   team_id    = var.team_id
-  domain     = var.custom_domain
+  domain     = var.frontend_domain
 }

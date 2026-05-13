@@ -1,5 +1,7 @@
 # Root configuration for all stacks under terraform/.
-# Owns the HCP Terraform remote backend and the Vercel provider declaration.
+# Owns the HCP Terraform remote backend.
+# Provider generation is stack-specific: vercel blocks live in the vercel stack's
+# local generate blocks; GCP stacks declare the google provider in their versions.tf.
 
 locals {
   env_vars     = read_terragrunt_config(find_in_parent_folders("env.hcl"))
@@ -30,31 +32,6 @@ terraform {
 EOF
 }
 
-generate "provider" {
-  path      = "provider.tf"
-  if_exists = "overwrite_terragrunt"
-  contents  = <<EOF
-provider "vercel" {
-  api_token = var.vercel_api_token
-  team      = var.vercel_team_id
-}
-EOF
-}
-
-generate "common_variables" {
-  path      = "common_variables.tf"
-  if_exists = "overwrite_terragrunt"
-  contents  = <<EOF
-variable "vercel_api_token" {
-  type        = string
-  sensitive   = true
-  description = "Vercel API token. Set via HCP Terraform workspace variable."
-}
-
-variable "vercel_team_id" {
-  type        = string
-  default     = null
-  description = "Vercel team ID. Null for personal Hobby accounts."
-}
-EOF
-}
+# Vercel provider and variables are generated only for the vercel stack.
+# They have been moved into terraform/envs/prod/vercel/terragrunt.hcl as
+# stack-local generate blocks so GCP stacks don't receive undefined variables.

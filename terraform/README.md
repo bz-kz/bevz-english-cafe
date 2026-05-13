@@ -1,4 +1,44 @@
-# Terraform — Vercel frontend (prod)
+# Terraform — infrastructure (prod)
+
+## Stack inventory
+
+| Stack | HCP workspace | Purpose | Depends on |
+|---|---|---|---|
+| `terraform/envs/prod/vercel` | english-cafe-prod-vercel | Vercel project, env vars, custom domain | (none) |
+| `terraform/envs/prod/wif` | english-cafe-prod-wif | GCP Workload Identity Pool for HCP→GCP auth | (none) |
+| `terraform/envs/prod/firestore` | english-cafe-prod-firestore | Firestore Native DB in asia-northeast1 | wif |
+| `terraform/envs/prod/cloudrun` | english-cafe-prod-cloudrun | Cloud Run service + Artifact Registry + domain mapping | wif, firestore |
+
+## Apply order (first-time GCP bootstrap)
+
+The `wif` stack provisions both the Workload Identity Pool **and** the runner SA that the other two stacks impersonate via WIF — no manual SA creation is required.
+
+1. **Create three HCP workspaces** manually: `english-cafe-prod-wif`, `english-cafe-prod-firestore`, `english-cafe-prod-cloudrun` (CLI-driven workflow, agent type: remote).
+2. **`wif` stack first** — bootstrap with human credentials:
+   ```bash
+   gcloud auth application-default login   # one-time
+   cd terraform/envs/prod/wif
+   terragrunt init
+   terragrunt apply
+   ```
+   The human needs `roles/iam.workloadIdentityPoolAdmin` + `roles/iam.serviceAccountAdmin` + `roles/resourcemanager.projectIamAdmin` on the GCP project for this single apply. Subsequent re-applies happen via HCP (the runner SA gets the same roles).
+
+   After apply, grab two outputs and set them as **Environment variables** (not Terraform variables) on the firestore and cloudrun workspaces:
+
+   | HCP env var | Value source |
+   |---|---|
+   | `TFC_GCP_PROVIDER_AUTH` | `true` (literal) |
+   | `TFC_GCP_WORKLOAD_PROVIDER_NAME` | `provider_name` output |
+   | `TFC_GCP_RUN_SERVICE_ACCOUNT_EMAIL` | `runner_service_account_email` output |
+
+3. **`firestore` stack**: `terragrunt apply` from HCP. Creates the Firestore Native DB in `asia-northeast1`.
+4. **`cloudrun` stack**: requires `image` workspace variable (Terraform variable, not env var). For initial bootstrap, set `TF_VAR_image=us-docker.pkg.dev/cloudrun/container/hello` so the service comes up green. Phase C replaces it with the real Artifact Registry URI after the first image push.
+5. **`vercel` stack** (already exists): in Phase C, add `NEXT_PUBLIC_API_URL=https://api.bz-kz.com` to the `env_vars` workspace HCL map.
+6. **DNS**: after cloudrun apply, the `custom_domain_dns_records` output lists the records to add for `api.bz-kz.com` at the DNS provider. Wait for propagation + Google-managed cert provisioning (up to ~15 min).
+
+---
+
+# Vercel frontend stack
 
 Manages the Vercel project, environment variables, and bound custom domain for the production frontend (`english-cafe-prod` → `https://english-cafe.bz-kz.com`). State and secrets live in HCP Terraform (Terraform Cloud) free plan.
 
@@ -176,3 +216,6 @@ Each gets its own HCP workspace (auto-created on `terragrunt init`, named `engli
 | `Error: linking git repo: bad_request` on apply | Vercel team can't see the GitHub repo | Install/configure the Vercel GitHub App for the right account; see GitHub integration above |
 | `env_vars` value on HCP shows but plan creates nothing | `inputs = { env_vars = ... }` set in terragrunt | Remove it; terragrunt's `.auto.tfvars.json` overrides HCP's runtime tfvars |
 | Provider attribute errors at `validate` | Provider major version mismatch | Update `version` pin in `modules/vercel-project/versions.tf` and re-validate |
+| `Permission "iam.workloadIdentityPools.create" denied` | Applying wif stack without sufficient GCP IAM | The human running wif bootstrap needs `roles/iam.workloadIdentityPoolAdmin` on the GCP project |
+| `Error 403: ... DataStore` | Runtime SA missing Firestore permission | Check the `google_project_iam_member.runtime_firestore` binding in cloud-run-service module wasn't destroyed |
+| `Domain mapping in PENDING state` | DNS records not yet propagated | Verify with `dig api.bz-kz.com`; cert provisioning can take up to 15 minutes after DNS propagates |

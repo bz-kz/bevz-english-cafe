@@ -1,346 +1,178 @@
-# 英会話カフェ監視システム - Terraform Infrastructure
+# Terraform — Vercel frontend (prod)
 
-このディレクトリには、英会話カフェWebサイトの監視システム（Grafana Cloud + New Relic）をデプロイするためのTerraform設定が含まれています。
+Manages the Vercel project, environment variables, and bound custom domain for the production frontend (`english-cafe-prod` → `https://english-cafe.bz-kz.com`). State and secrets live in HCP Terraform (Terraform Cloud) free plan.
 
-## 🚀 クイックスタート
-
-### 1. 対話型セットアップ（推奨）
-
-```bash
-cd terraform/scripts
-./setup.sh
-```
-
-### 2. 設定検証
-
-```bash
-./validate-config.sh
-```
-
-### 3. デプロイ実行
-
-```bash
-./deploy-monitoring.sh
-```
-
-## 📋 概要
-
-このTerraformコードは以下を自動化します：
-
-- **New Relic**: APM、Browser監視、アラート設定
-- **Grafana Cloud**: ダッシュボード、アラートルール、通知設定
-- **Vercel**: フロントエンドプロジェクト管理
-- **Render**: バックエンドサービス管理（カスタムAPI統合）
-- **コスト管理**: 予算アラート、使用量監視
-
-## 🏗️ アーキテクチャ
+## Layout
 
 ```
 terraform/
-├── environments/          # 環境固有の設定
-│   └── prod/             # 本番環境
-├── modules/              # 再利用可能なTerraformモジュール
-│   ├── grafana/         # Grafana Cloud監視設定
-│   ├── newrelic/        # New Relic監視設定
-│   └── render/          # Render.comデプロイ設定
-├── scripts/             # デプロイ・ユーティリティスクリプト
-│   ├── setup.sh         # 対話型初期セットアップ
-│   ├── validate-config.sh # 設定検証
-│   └── deploy-monitoring.sh # デプロイ実行
-└── MONITORING_DEPLOYMENT_GUIDE.md # 詳細デプロイガイド
+├── root.hcl                       # root: HCP cloud backend + provider
+├── envs/prod/
+│   ├── env.hcl                    # prod locals (incl. hcp_organization)
+│   └── vercel/terragrunt.hcl      # this stack
+└── modules/vercel-project/        # reusable module
 ```
 
-## 🚀 クイックスタート
+## Prerequisites
 
-### 1. 前提条件
+- Terraform `>= 1.6`
+- Terragrunt `>= 1.0`
+- An HCP Terraform organization. Create at https://app.terraform.io.
 
-```bash
-# 必要なツールのインストール
-brew install terraform awscli jq
+## One-time setup
 
-# AWSクレデンシャルの設定
-aws configure
+1. Pin the HCP organization slug in `terraform/envs/prod/env.hcl`:
 
-# Terraformバージョン確認
-terraform version  # >= 1.6.0
-```
-
-### 2. 環境変数の設定
-
-```bash
-# New Relic
-export TF_VAR_newrelic_account_id="your-account-id"
-export TF_VAR_newrelic_api_key="your-api-key"
-
-# Grafana Cloud
-export TF_VAR_grafana_url="https://your-org.grafana.net"
-export TF_VAR_grafana_auth_token="your-service-account-token"
-
-# 通知設定
-export TF_VAR_slack_webhook_url="<replace-with-real-slack-webhook-url>"
-export TF_VAR_admin_email="admin@english-cafe.com"
-```
-
-### 3. 設定ファイルの準備
-
-```bash
-# 本番環境の設定ファイルをコピー
-cd terraform/environments/prod
-cp terraform.tfvars.example terraform.tfvars
-
-# 実際の値を設定
-vim terraform.tfvars
-```
-
-### 4. デプロイ実行
-
-```bash
-# 開発環境にプラン実行
-./scripts/deploy.sh dev plan
-
-# 本番環境にデプロイ
-./scripts/deploy.sh prod apply
-
-# 設定の検証
-./scripts/deploy.sh prod validate
-```
-
-## 📊 監視内容
-
-### New Relic監視項目
-
-- **APM**: アプリケーションパフォーマンス
-- **Browser**: リアルユーザーモニタリング
-- **Core Web Vitals**: LCP、FID、CLS
-- **エラー追跡**: JavaScript エラー、API エラー
-- **ビジネスメトリクス**: レッスン予約、問い合わせ数
-
-### Grafanaダッシュボード
-
-- **パフォーマンス概要**: Web Vitals、レスポンス時間
-- **ビジネスメトリクス**: コンバージョン、ユーザーアクション
-- **エラー分析**: エラー率、エラー詳細
-- **インフラ監視**: CPU、メモリ、ネットワーク
-
-### アラート設定
-
-| メトリクス | Warning | Critical | 通知先 |
-|-----------|---------|----------|--------|
-| エラー率 | 1% | 2% | Slack + Email |
-| レスポンス時間 | 1.5s | 2.0s | Slack + Email |
-| LCP | 2.0s | 2.5s | Slack |
-| メモリ使用率 | 70% | 80% | Slack + Email |
-
-## 🔧 環境別設定
-
-### 開発環境 (dev)
-- 緩いアラート閾値
-- Slack通知のみ
-- 短いデータ保持期間
-
-### ステージング環境 (staging)
-- 本番に近い設定
-- 限定的な通知
-- 中程度のデータ保持
-
-### 本番環境 (prod)
-- 厳しいアラート閾値
-- 全通知チャンネル有効
-- 長期データ保持
-- PagerDuty統合
-
-## 💰 コスト管理
-
-### 無料プラン制限
-
-**New Relic (無料)**
-- データ取り込み: 100GB/月
-- ユーザー: 1名
-- データ保持: 8日間
-
-**Grafana Cloud (無料)**
-- メトリクス: 10,000シリーズ
-- ログ: 50GB/月
-- ダッシュボード: 無制限
-
-**AWS (従量課金)**
-- CloudWatch: ~$5-10/月
-- SNS: ~$1/月
-- Secrets Manager: ~$1/月
-
-### コスト最適化
-
-```bash
-# 月次予算アラート設定
-monthly_budget_limit = 50  # USD
-
-# 不要なメトリクス削除
-terraform plan -target=module.grafana.grafana_dashboard.unused
-
-# リソース使用量確認
-terraform output cost_information
-```
-
-## 🔒 セキュリティ
-
-### 機密情報管理
-
-```bash
-# AWS Secrets Managerに保存
-aws secretsmanager create-secret \
-  --name "prod/monitoring/secrets" \
-  --secret-string '{
-    "newrelic_api_key": "your-key",
-    "grafana_token": "your-token"
-  }'
-```
-
-### アクセス制御
-
-```bash
-# IP制限設定
-allowed_ip_ranges = [
-  "10.0.0.0/8",      # 社内ネットワーク
-  "203.0.113.0/24"   # オフィスIP
-]
-
-# 暗号化有効化
-enable_encryption = true
-```
-
-## 📚 運用手順
-
-### 日常運用
-
-```bash
-# 設定変更の適用
-./scripts/deploy.sh prod plan
-./scripts/deploy.sh prod apply
-
-# 監視URL確認
-./scripts/deploy.sh prod output
-
-# 状態の更新
-./scripts/deploy.sh prod refresh
-```
-
-### トラブルシューティング
-
-```bash
-# 状態確認
-terraform show
-
-# リソース一覧
-terraform state list
-
-# 特定リソースの詳細
-terraform state show module.newrelic.newrelic_application.english_cafe
-
-# 状態の修復
-terraform refresh -var-file=terraform.tfvars
-```
-
-### 緊急時対応
-
-```bash
-# アラート一時停止
-terraform apply -target=module.newrelic.newrelic_alert_policy.performance \
-  -var="alert_enabled=false"
-
-# 完全削除（緊急時のみ）
-./scripts/deploy.sh prod destroy
-```
-
-## 🔄 CI/CD統合
-
-### GitHub Actions
-
-```yaml
-# .github/workflows/terraform-monitoring.yml
-name: Terraform Monitoring
-
-on:
-  push:
-    branches: [main]
-    paths: ['terraform/**']
-
-jobs:
-  terraform:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v2
-      - name: Terraform Plan
-        run: ./terraform/scripts/deploy.sh prod plan
-      - name: Terraform Apply
-        if: github.ref == 'refs/heads/main'
-        run: ./terraform/scripts/deploy.sh prod apply true
-```
-
-### 自動デプロイ
-
-```bash
-# 自動承認でのデプロイ
-./scripts/deploy.sh prod apply true
-
-# 検証付きデプロイ
-./scripts/deploy.sh prod validate && \
-./scripts/deploy.sh prod apply
-```
-
-## 📈 監視URL
-
-デプロイ完了後、以下のURLで監視状況を確認できます：
-
-```bash
-# 監視URL表示
-terraform output monitoring_urls
-
-# 出力例:
-# New Relic: https://one.newrelic.com/redirect/entity/...
-# Grafana Performance: https://your-org.grafana.net/d/.../
-# Grafana Business: https://your-org.grafana.net/d/.../
-```
-
-## 🆘 サポート
-
-### よくある問題
-
-1. **Terraform初期化エラー**
-   ```bash
-   # バックエンド設定の確認
-   terraform init -reconfigure
+   ```hcl
+   locals {
+     hcp_organization = "<your-org>"
+     # ...
+   }
    ```
 
-2. **API認証エラー**
+   (No shell env var needed. The org name is non-secret and pinned in code so all shells agree.)
+
+2. Log in to HCP Terraform CLI:
+
    ```bash
-   # 環境変数の確認
-   echo $TF_VAR_newrelic_api_key
-   echo $TF_VAR_grafana_auth_token
+   terraform login
    ```
 
-3. **リソース競合エラー**
+3. From `terraform/envs/prod/vercel/`, run:
+
    ```bash
-   # 状態のインポート
-   terraform import module.newrelic.newrelic_application.english_cafe <app_id>
+   terragrunt init
    ```
 
-### ドキュメント
+   This creates the workspace `english-cafe-prod-vercel` in your HCP organization.
 
-**セットアップガイド:**
-- [📋 クイックセットアップ チェックリスト](../docs/quick-setup-checklist.md)
-- [🔑 APIキー・トークン設定ガイド](../docs/api-keys-setup-guide.md)
-- [🟣 Render + Terraform 統合ガイド](../docs/render-terraform-integration.md)
-- [🏗️ 設計書詳細](../docs/terraform-monitoring-design.md)
+4. In the HCP Terraform UI for that workspace, set the following **Terraform variables** (not Environment variables):
 
-**公式ドキュメント:**
-- [Terraform New Relic Provider](https://registry.terraform.io/providers/newrelic/newrelic/latest/docs)
-- [Terraform Grafana Provider](https://registry.terraform.io/providers/grafana/grafana/latest/docs)
-- [Terraform Vercel Provider](https://registry.terraform.io/providers/vercel/vercel/latest/docs)
+   | Variable | Type | Sensitive | Notes |
+   |---|---|---|---|
+   | `vercel_api_token` | string | ✓ | https://vercel.com/account/tokens |
+   | `vercel_team_id` | string | — | Leave unset/null for personal Hobby |
+   | `env_vars` | **HCL** | ✓ | Full env-var map. See shape below. |
 
-### 連絡先
+   **Important:** flip the `HCL` toggle ON for `env_vars`. Without it, the value is treated as a plain string and ignored.
 
-- 技術的な問題: engineering-team@english-cafe.com
-- 緊急時: #prod-alerts (Slack)
-- ドキュメント: [Wiki](https://github.com/your-org/english-cafe/wiki)
+   Do NOT add `env_vars` to terragrunt `inputs` — terragrunt writes to `terragrunt.auto.tfvars.json` which has higher precedence than HCP's runtime `terraform.tfvars`, so an inputs-side empty map would silently override the workspace value.
+
+   `env_vars` HCL value example:
+
+   ```hcl
+   {
+     NEXT_PUBLIC_GA_MEASUREMENT_ID = {
+       value     = ""
+       target    = ["production"]
+       sensitive = false
+     }
+     NEXT_PUBLIC_GOOGLE_VERIFICATION = {
+       value     = ""
+       target    = ["production"]
+       sensitive = false
+     }
+     # ...
+   }
+   ```
+
+   The entire `env_vars` HCP variable is marked sensitive. Individual `sensitive` flags inside the map still propagate to Vercel for per-variable masking in the Vercel UI.
+
+## Importing the existing project
+
+If a Vercel project already exists (manual setup), import it before the first `terragrunt apply`, otherwise Terraform tries to create a duplicate and fails.
+
+### 1. Gather IDs
+
+```bash
+# Project ID — from the Vercel dashboard: Project → Settings → General → "Project ID"
+# (CLI `vercel projects ls` only shows projects in the currently-scoped team)
+```
+
+### 2. Run the imports
+
+`terraform import` runs **locally**, so it can't read sensitive HCP workspace variables. Pass the Vercel token inline:
+
+```bash
+cd terraform/envs/prod/vercel
+PROJECT_ID=<from step 1>
+TOKEN=<vercel api token>
+
+terragrunt init
+
+TF_VAR_vercel_api_token="$TOKEN" \
+  terragrunt import 'vercel_project.this' "$PROJECT_ID"
+
+TF_VAR_vercel_api_token="$TOKEN" \
+  terragrunt import 'vercel_project_domain.this[0]' \
+  "$PROJECT_ID/english-cafe.bz-kz.com"
+```
+
+Env-var resources do **not** need importing — they are created on first apply.
+
+### 3. Verify zero diff
+
+```bash
+terragrunt plan
+```
+
+Expected: minimal in-place drift on `vercel_project` (build/install/output commands becoming explicit, `resource_config` filling in computed fields), plus the new env-var resources to add. Domain should show no diff.
+
+If diffs are larger than expected: **the running site is the source of truth at this stage.** Adjust the module inputs in `envs/prod/vercel/terragrunt.hcl` (or the HCP `env_vars` variable) until plan is clean. Do not apply.
+
+## Daily workflow
+
+```bash
+cd terraform/envs/prod/vercel
+
+# Preview a change
+terragrunt plan
+
+# Apply (runs remotely in HCP — no local token needed; HCP injects it)
+terragrunt apply
+```
+
+Local `terragrunt import` and any other locally-run command still need `TF_VAR_vercel_api_token` passed inline.
+
+## Adding a new env var
+
+1. Add the key to the HCP workspace `env_vars` variable map (paste-edit the HCL value).
+2. `terragrunt plan` — verify exactly one create.
+3. `terragrunt apply`.
+
+No code change required for env-var additions/removals.
+
+## GitHub integration
+
+The Vercel project links to GitHub repo `bz-kz/bevz-english-cafe` (production branch `main`). For Vercel to accept this link, the Vercel GitHub App must be installed on the GitHub account that owns the repo, and the **Vercel team that owns the Vercel project** must have access to that installation.
+
+If apply fails with `error linking git repo: ... you need to install the GitHub integration first`:
+
+- Visit https://vercel.com/<team>/<project>/settings/git
+- Disconnect any stale connection
+- Click Connect → GitHub → run through the install flow, granting access to `bz-kz/bevz-english-cafe`
+
+## DNS
+
+`english-cafe.bz-kz.com` resolves via DNS records on `bz-kz.com`, managed outside this repo. This Terraform stack only owns the Vercel-side domain binding.
+
+## Future stacks
+
+Layout reserves `envs/prod/<stack>/` for future additions:
+
+- `envs/prod/cloudrun/` — Python service on Google Cloud Run
+- `envs/prod/github/` — repo settings, branch protection
+
+Each gets its own HCP workspace (auto-created on `terragrunt init`, named `english-cafe-prod-<stack>`) and its own state. Cross-stack references use Terragrunt `dependency` blocks.
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `Error: project name already exists` on first apply | Import skipped | Run the import steps before applying |
+| `Value for var.vercel_api_token unavailable` during import | HCP marks the variable sensitive; local commands can't read HCP secrets | Pass `TF_VAR_vercel_api_token=...` inline when running terragrunt locally |
+| Plan shows env var drift after import | HCP `env_vars` map doesn't match Vercel's current values | Update the HCP variable to match what Vercel currently has |
+| `Error: organization "<name>" not found` on init | `hcp_organization` slug in `env.hcl` is wrong | Check the slug at https://app.terraform.io/app/organizations and update `env.hcl` |
+| `Error: linking git repo: bad_request` on apply | Vercel team can't see the GitHub repo | Install/configure the Vercel GitHub App for the right account; see GitHub integration above |
+| `env_vars` value on HCP shows but plan creates nothing | `inputs = { env_vars = ... }` set in terragrunt | Remove it; terragrunt's `.auto.tfvars.json` overrides HCP's runtime tfvars |
+| Provider attribute errors at `validate` | Provider major version mismatch | Update `version` pin in `modules/vercel-project/versions.tf` and re-validate |

@@ -278,3 +278,46 @@ async def test_book_trial_second_time_rejects(service, user_repo):
     await FirestoreLessonSlotRepository(service._fs).save(slot)
     with pytest.raises(TrialAlreadyUsedError):
         await service.book(user=user, slot_id=str(slot.id))
+
+
+async def test_cancel_within_24h_rejected_and_quota_unchanged(
+    service, quota_repo, user_repo
+):
+    user = await _persist_user(user_repo, uid="u-c1", plan=Plan.STANDARD)
+    await quota_repo.save(_quota(user_id=user.uid))
+    # slot starts in 12h → 24h rule must reject cancel
+    soon_slot = _slot(start_offset_hours=12)
+    await FirestoreLessonSlotRepository(service._fs).save(soon_slot)
+    booking = await service.book(user=user, slot_id=str(soon_slot.id))
+    from app.services.booking_errors import CancelDeadlinePassedError
+
+    with pytest.raises(CancelDeadlinePassedError):
+        await service.cancel(user=user, booking_id=str(booking.id))
+    ym = datetime.now(UTC).strftime("%Y-%m")
+    after = await quota_repo.find(user.uid, ym)
+    assert after.used == 1  # quota stays consumed
+
+
+async def test_cancel_more_than_24h_refunds_quota(service, quota_repo, user_repo):
+    user = await _persist_user(user_repo, uid="u-c2", plan=Plan.STANDARD)
+    await quota_repo.save(_quota(user_id=user.uid))
+    far_slot = _slot(start_offset_hours=72)
+    await FirestoreLessonSlotRepository(service._fs).save(far_slot)
+    booking = await service.book(user=user, slot_id=str(far_slot.id))
+    await service.cancel(user=user, booking_id=str(booking.id))
+    ym = datetime.now(UTC).strftime("%Y-%m")
+    after = await quota_repo.find(user.uid, ym)
+    assert after.used == 0
+
+
+async def test_cancel_trial_does_not_touch_quota(service, quota_repo, user_repo):
+    user = await _persist_user(user_repo, uid="u-c3", plan=Plan.STANDARD)
+    await quota_repo.save(_quota(user_id=user.uid))
+    trial_slot = _slot(start_offset_hours=72)
+    trial_slot.lesson_type = LessonType.TRIAL
+    await FirestoreLessonSlotRepository(service._fs).save(trial_slot)
+    booking = await service.book(user=user, slot_id=str(trial_slot.id))
+    await service.cancel(user=user, booking_id=str(booking.id))
+    ym = datetime.now(UTC).strftime("%Y-%m")
+    after = await quota_repo.find(user.uid, ym)
+    assert after.used == 0  # trial never consumed quota in the first place

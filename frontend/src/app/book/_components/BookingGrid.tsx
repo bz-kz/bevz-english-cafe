@@ -72,6 +72,13 @@ export function BookingGrid({
     if (!slot) return { kind: 'empty' };
     if (slot.status === 'closed') return { kind: 'closed', slot };
     if (slot.remaining <= 0) return { kind: 'full', slot };
+
+    const start = new Date(slot.start_at);
+    const ms24h = 24 * 60 * 60 * 1000;
+    if (start.getTime() - Date.now() < ms24h) {
+      return { kind: 'within24h', slot };
+    }
+
     return { kind: 'open', slot };
   };
 

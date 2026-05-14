@@ -48,6 +48,20 @@ async def get_current_user(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not registered. Call POST /api/v1/users/me to initialize.",
         )
+    # Firebase Auth の custom claim から admin フラグを hydrate
+    user.is_admin = bool(decoded.get("admin", False))
+    return user
+
+
+async def get_admin_user(
+    user: Annotated[User, Depends(get_current_user)],
+) -> User:
+    """admin 専用 endpoint の gate。`admin: true` custom claim 必須。"""
+    if not user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
     return user
 
 

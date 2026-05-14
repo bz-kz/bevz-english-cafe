@@ -23,6 +23,11 @@ async def lifespan(app: FastAPI):
     # 起動時の処理
     logger.info("英会話カフェ API starting up...")
 
+    # Firebase Admin SDK 初期化 (ADC; FIREBASE_AUTH_EMULATOR_HOST も SDK が auto-detect)
+    if not firebase_admin._apps:
+        firebase_admin.initialize_app()
+        logger.info("Firebase Admin SDK initialized")
+
     # DIコンテナの初期化
     get_container()
     logger.info("Dependency injection container initialized")

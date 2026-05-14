@@ -26,11 +26,15 @@ from app.domain.repositories.lesson_slot_repository import LessonSlotRepository
 from app.services.booking_errors import (
     AlreadyBookedError,
     BookingNotFoundError,
+    CancelDeadlinePassedError,
+    NoActiveQuotaError,
     NotBookingOwnerError,
+    QuotaExhaustedError,
     SlotFullError,
     SlotInPastError,
     SlotNotFoundError,
     SlotNotOpenError,
+    TrialAlreadyUsedError,
 )
 from app.services.booking_service import BookingService
 
@@ -80,6 +84,12 @@ async def create_booking(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
     except (SlotFullError, AlreadyBookedError) as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    except TrialAlreadyUsedError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, "trial_already_used") from exc
+    except NoActiveQuotaError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, "no_active_quota") from exc
+    except QuotaExhaustedError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, "quota_exhausted") from exc
     return _booking_response(booking)
 
 
@@ -134,4 +144,6 @@ async def cancel_booking(
             status.HTTP_403_FORBIDDEN,
             "You can only cancel your own bookings",
         ) from exc
+    except CancelDeadlinePassedError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, "cancel_deadline_passed") from exc
     return _booking_response(booking)

@@ -44,6 +44,25 @@ class FirestoreLessonSlotRepository(LessonSlotRepository):
         )
         return [self._from_dict(doc.to_dict(), doc.id) async for doc in query.stream()]
 
+    async def find_in_range(
+        self,
+        *,
+        from_: datetime,
+        to_: datetime,
+    ) -> list[LessonSlot]:
+        query = (
+            self._collection.where("start_at", ">=", from_)
+            .where("start_at", "<", to_)
+            .order_by("start_at")
+        )
+        results: list[LessonSlot] = []
+        async for doc in query.stream():
+            slot = self._from_dict(doc.to_dict(), doc.id)
+            if slot.status == SlotStatus.CANCELLED:
+                continue
+            results.append(slot)
+        return results
+
     async def delete(self, slot_id: UUID) -> bool:
         doc_ref = self._collection.document(str(slot_id))
         doc = await doc_ref.get()

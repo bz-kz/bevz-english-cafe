@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.api.dependencies.auth import get_current_user
 from app.api.dependencies.repositories import (
@@ -90,12 +91,18 @@ async def list_my_bookings(
     user: Annotated[User, Depends(get_current_user)],
     service: Annotated[BookingService, Depends(get_booking_service)],
     slot_repo: Annotated[LessonSlotRepository, Depends(get_lesson_slot_repository)],
+    from_: Annotated[datetime | None, Query(alias="from")] = None,
+    to: Annotated[datetime | None, Query()] = None,
 ) -> list[BookingWithSlotResponse]:
     bookings = await service.find_user_bookings(user=user)
     results: list[BookingWithSlotResponse] = []
     for b in bookings:
         slot = await slot_repo.find_by_id(UUID(b.slot_id))
         if slot is None:
+            continue
+        if from_ is not None and slot.start_at < from_:
+            continue
+        if to is not None and slot.start_at >= to:
             continue
         results.append(
             BookingWithSlotResponse(

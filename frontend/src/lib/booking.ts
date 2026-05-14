@@ -69,6 +69,28 @@ export async function listMyBookings(): Promise<Booking[]> {
   return resp.data;
 }
 
+export async function listSlotsInRange(
+  from: string, // ISO date or datetime
+  to: string
+): Promise<LessonSlot[]> {
+  const resp = await axios.get<LessonSlot[]>(
+    `${API_BASE}/api/v1/lesson-slots`,
+    { params: { from, to } }
+  );
+  return resp.data;
+}
+
+export async function listMyBookingsInRange(
+  from: string,
+  to: string
+): Promise<Booking[]> {
+  const resp = await axios.get<Booking[]>(
+    `${API_BASE}/api/v1/users/me/bookings`,
+    { params: { from, to }, headers: await authHeaders() }
+  );
+  return resp.data;
+}
+
 export async function cancelBooking(bookingId: string): Promise<Booking> {
   const resp = await axios.patch(
     `${API_BASE}/api/v1/bookings/${bookingId}/cancel`,

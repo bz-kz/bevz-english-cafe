@@ -36,8 +36,8 @@ inputs = {
   custom_domain = ""
 
   env_vars = {
-    GCP_PROJECT_ID     = local.env.locals.gcp_project_id
-    REPOSITORY_BACKEND = "firestore"
-    ENVIRONMENT        = "production"
+    GCP_PROJECT_ID = local.env.locals.gcp_project_id
+    ENVIRONMENT    = "production"
+    CORS_ORIGINS   = "https://english-cafe.bz-kz.com"
   }
 }

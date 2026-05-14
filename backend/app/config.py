@@ -1,5 +1,3 @@
-from typing import Literal
-
 from pydantic import ConfigDict
 from pydantic_settings import BaseSettings
 
@@ -12,9 +10,6 @@ class Settings(BaseSettings):
     app_version: str = "1.0.0"
     environment: str = "development"
     debug: bool = True
-
-    # データベース設定
-    database_url: str = "postgresql://postgres:password@localhost:5442/english_cafe_db"
 
     # CORS設定
     cors_origins: str = "http://localhost:3010"
@@ -48,7 +43,6 @@ class Settings(BaseSettings):
     firestore_emulator_host: str | None = (
         None  # read for documentation; SDK auto-detects
     )
-    repository_backend: Literal["sqlalchemy", "firestore"] = "sqlalchemy"
 
     model_config = ConfigDict(env_file=".env", case_sensitive=False)
 

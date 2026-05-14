@@ -221,7 +221,7 @@ npm run docker:build
 # 使用中のポート確認
 lsof -i :3010  # フロントエンド
 lsof -i :8010  # バックエンド
-lsof -i :5442  # PostgreSQL
+lsof -i :8080  # Firestore Emulator
 ```
 
 ### パフォーマンス最適化

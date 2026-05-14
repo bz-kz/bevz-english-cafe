@@ -8,6 +8,60 @@
 | `terraform/envs/prod/wif` | english-cafe-prod-wif | GCP Workload Identity Pool for HCP→GCP auth | (none) |
 | `terraform/envs/prod/firestore` | english-cafe-prod-firestore | Firestore Native DB in asia-northeast1 | wif |
 | `terraform/envs/prod/cloudrun` | english-cafe-prod-cloudrun | Cloud Run service + Artifact Registry + domain mapping | wif, firestore |
+| `terraform/envs/prod/billing` | english-cafe-prod-billing | Monthly cost cap + killswitch (disables billing at threshold) | (none) |
+
+### Billing killswitch (one-time bootstrap)
+
+The `billing` stack requires billing-account-level IAM (`roles/billing.user` on
+the billing account) which the HCP runner SA doesn't have. Run locally with
+your own credentials:
+
+1. Create HCP workspace `english-cafe-prod-billing`, set **Execution Mode** to
+   **Local**.
+2. Grant the local user a few permissions that Cloud Functions 2nd gen and the
+   billing-budget API need. These were one-shot fixes during the live bootstrap;
+   re-running on a different machine or different user requires repeating them:
+   ```bash
+   gcloud auth application-default set-quota-project english-cafe-496209
+
+   # Cloud Functions 2nd gen builds default to the compute-default SA. The
+   # local user needs ActAs to launch the build.
+   gcloud iam service-accounts add-iam-policy-binding \
+     <project-number>-compute@developer.gserviceaccount.com \
+     --member="user:<your-email>" \
+     --role="roles/iam.serviceAccountUser" \
+     --project=english-cafe-496209
+
+   # The compute-default SA itself needs build + logging perms so the Cloud
+   # Build job can actually run and write logs.
+   gcloud projects add-iam-policy-binding english-cafe-496209 \
+     --member="serviceAccount:<project-number>-compute@developer.gserviceaccount.com" \
+     --role="roles/cloudbuild.builds.builder" --condition=None
+   gcloud projects add-iam-policy-binding english-cafe-496209 \
+     --member="serviceAccount:<project-number>-compute@developer.gserviceaccount.com" \
+     --role="roles/logging.logWriter" --condition=None
+   ```
+3. From a shell with `gcloud auth application-default login` completed by a
+   user who has `roles/billing.user` (or `roles/billing.admin`) on billing
+   account `015032-CC5A81-BFE7CA`:
+   ```bash
+   cd terraform/envs/prod/billing
+   terragrunt init
+   GOOGLE_CLOUD_QUOTA_PROJECT=english-cafe-496209 terragrunt apply
+   ```
+   The `GOOGLE_CLOUD_QUOTA_PROJECT` env var is required because the
+   billingbudgets API does not consume the resource's project as the quota
+   project by default. ADC's `set-quota-project` alone is not enough — the
+   API checks the env var.
+4. After apply, the budget shows up at
+   https://console.cloud.google.com/billing/<billing-account>/budgets — verify
+   the displayed amount is ¥2000 with thresholds at 50/90/100%.
+5. To test: temporarily edit the budget down to ¥1 (manually in console), wait
+   a few minutes, watch for the Cloud Function to fire and billing to be
+   disabled. Then re-enable billing manually and bump the budget back to ¥2000
+   via `terragrunt apply`.
+
+---
 
 ## Apply order (first-time GCP bootstrap)
 
@@ -219,3 +273,6 @@ Each gets its own HCP workspace (auto-created on `terragrunt init`, named `engli
 | `Permission "iam.workloadIdentityPools.create" denied` | Applying wif stack without sufficient GCP IAM | The human running wif bootstrap needs `roles/iam.workloadIdentityPoolAdmin` on the GCP project |
 | `Error 403: ... DataStore` | Runtime SA missing Firestore permission | Check the `google_project_iam_member.runtime_firestore` binding in cloud-run-service module wasn't destroyed |
 | `Domain mapping in PENDING state` | DNS records not yet propagated | Verify with `dig api.bz-kz.com`; cert provisioning can take up to 15 minutes after DNS propagates |
+| `Permission billing.budgets.create denied` on billing stack apply | Local user lacks `roles/billing.user` on the billing account | In the GCP Billing console, grant `roles/billing.user` to the user running the apply (or `roles/billing.admin` for full control) |
+| `Permission denied: resource '...billingAccounts/...'` from Cloud Function logs | Function SA missing `roles/billing.user` on the billing account | Terraform should have created `google_billing_account_iam_member.killswitch_billing_user`. Re-apply the billing stack |
+| Billing-disable does not take effect | API enablement still propagating, or `cloudbilling` API not enabled on project | Wait ~1 min and retry; verify `cloudbilling.googleapis.com` is enabled |

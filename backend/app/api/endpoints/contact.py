@@ -4,19 +4,16 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.schemas.contact import (
     ContactCreateRequest,
     ContactCreateResponse,
     ContactResponse,
 )
-from app.config import get_settings
-from app.domain.repositories.contact_repository import ContactRepository
-from app.infrastructure.database.connection import get_async_session
+from app.infrastructure.database.firestore_client import get_firestore_client
 from app.infrastructure.di.container import get_container
-from app.infrastructure.repositories.sqlalchemy_contact_repository import (
-    SQLAlchemyContactRepository,
+from app.infrastructure.repositories.firestore_contact_repository import (
+    FirestoreContactRepository,
 )
 from app.services.contact_service import ContactService
 
@@ -25,27 +22,11 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/contacts", tags=["contacts"])
 
 
-async def get_contact_service(
-    session: Annotated[AsyncSession, Depends(get_async_session)],
-) -> ContactService:
-    """Per-request ContactService: container singletons + session-scoped repository."""
+async def get_contact_service() -> ContactService:
+    """Per-request ContactService: container singletons + Firestore repository."""
     container = get_container()
-    # EmailService は Protocol のため Container.email_service() 経由で取得する
     email_service = container.email_service()
-    settings = get_settings()
-
-    contact_repository: ContactRepository
-    if settings.repository_backend == "firestore":
-        from app.infrastructure.database.firestore_client import get_firestore_client
-        from app.infrastructure.repositories.firestore_contact_repository import (
-            FirestoreContactRepository,
-        )
-
-        contact_repository = FirestoreContactRepository(get_firestore_client())
-    else:
-        contact_repository = SQLAlchemyContactRepository(session)
-
-    # session is still resolved per-request even in Firestore mode — removed in Phase D when SQLAlchemy is dropped
+    contact_repository = FirestoreContactRepository(get_firestore_client())
     return ContactService(contact_repository, email_service)
 
 

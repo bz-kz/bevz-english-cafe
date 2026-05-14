@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .api.endpoints.contact import router as contact_router
+from .api.endpoints.users import router as users_router
 from .config import get_settings
 from .infrastructure.di.container import get_container
 
@@ -101,6 +102,7 @@ async def root():
 
 # APIルーターの登録
 app.include_router(contact_router, prefix="/api/v1")
+app.include_router(users_router)
 
 
 if __name__ == "__main__":

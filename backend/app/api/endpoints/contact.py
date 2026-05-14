@@ -1,9 +1,12 @@
 """Contact API endpoints."""
+
 import logging
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+import firebase_admin
+from fastapi import APIRouter, Depends, Header, HTTPException, status
+from firebase_admin import auth as fb_auth
 
 from app.api.schemas.contact import (
     ContactCreateRequest,
@@ -40,8 +43,21 @@ async def get_contact_service() -> ContactService:
 async def create_contact(
     request: ContactCreateRequest,
     contact_service: Annotated[ContactService, Depends(get_contact_service)],
+    authorization: Annotated[str | None, Header()] = None,
 ) -> ContactCreateResponse:
-    """問い合わせを作成"""
+    """問い合わせを作成 — 認証済の場合 user_id を stamp する。"""
+    # オプショナル認証: 失敗しても匿名 submission として続行
+    user_id: str | None = None
+    if authorization and authorization.lower().startswith("bearer "):
+        token = authorization[len("Bearer ") :].strip()
+        try:
+            decoded = fb_auth.verify_id_token(token)
+            user_id = decoded.get("uid")
+        except (ValueError, firebase_admin.exceptions.FirebaseError) as exc:
+            logger.info(
+                f"Invalid token on contact submission, treating as anonymous: {exc}"
+            )
+
     try:
         contact = await contact_service.create_contact(
             name=request.name,
@@ -50,6 +66,7 @@ async def create_contact(
             lesson_type=request.lesson_type.value,
             preferred_contact=request.preferred_contact.value,
             message=request.message,
+            user_id=user_id,
         )
 
         return ContactCreateResponse(

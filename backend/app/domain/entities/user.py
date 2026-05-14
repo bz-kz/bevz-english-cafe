@@ -1,14 +1,11 @@
-"""User domain entity.
-
-Identified by Firebase Auth UID (Firestore document id).
-Holds profile fields editable in マイページ.
-"""
+"""User domain entity."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
+from app.domain.enums.plan import Plan
 from app.domain.value_objects.phone import Phone
 
 
@@ -22,6 +19,9 @@ class User:
     email: str
     name: str
     phone: Phone | None = None
+    plan: Plan | None = None
+    plan_started_at: datetime | None = None
+    trial_used: bool = False
     # is_admin は Firebase Auth の custom claim から hydrate される runtime 値。
     # Firestore には永続化しない (auth.py の get_current_user 参照)。
     is_admin: bool = False
@@ -51,3 +51,14 @@ class User:
             changed = True
         if changed:
             self.updated_at = _utc_now()
+
+    def set_plan(self, plan: Plan | None) -> None:
+        self.plan = plan
+        self.plan_started_at = _utc_now() if plan is not None else None
+        self.updated_at = _utc_now()
+
+    def mark_trial_used(self) -> None:
+        if self.trial_used:
+            return
+        self.trial_used = True
+        self.updated_at = _utc_now()

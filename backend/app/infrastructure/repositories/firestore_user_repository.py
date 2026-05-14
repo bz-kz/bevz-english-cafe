@@ -7,6 +7,7 @@ from typing import Any
 from google.cloud import firestore as fs  # type: ignore[import-untyped]
 
 from app.domain.entities.user import User
+from app.domain.enums.plan import Plan
 from app.domain.repositories.user_repository import UserRepository
 from app.domain.value_objects.phone import Phone
 
@@ -43,6 +44,9 @@ class FirestoreUserRepository(UserRepository):
             "email": user.email,
             "name": user.name,
             "phone": user.phone.value if user.phone else None,
+            "plan": user.plan.value if user.plan else None,
+            "plan_started_at": user.plan_started_at,
+            "trial_used": user.trial_used,
             "created_at": user.created_at,
             "updated_at": user.updated_at,
         }
@@ -51,11 +55,15 @@ class FirestoreUserRepository(UserRepository):
     def _from_dict(data: dict[str, Any] | None, uid: str) -> User:
         assert data is not None
         phone_val = data.get("phone")
+        plan_val = data.get("plan")
         return User(
             uid=uid,
             email=data["email"],
             name=data["name"],
             phone=Phone(phone_val) if phone_val else None,
+            plan=Plan(plan_val) if plan_val else None,
+            plan_started_at=data.get("plan_started_at"),
+            trial_used=bool(data.get("trial_used", False)),
             created_at=data["created_at"],
             updated_at=data["updated_at"],
         )

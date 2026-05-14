@@ -1,15 +1,24 @@
+"""pytest fixtures wired to the Firestore emulator.
+
+Tests that need a running app are gated on FIRESTORE_EMULATOR_HOST being set.
+If it isn't, the relevant fixtures call pytest.skip so non-emulator tests
+(domain / services unit tests) keep running.
+"""
 import asyncio
+import os
 from collections.abc import AsyncGenerator
 
 import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.pool import StaticPool
 
-from app.infrastructure.database.connection import get_async_session
-from app.infrastructure.database.models.base import Base
+from app.api.endpoints.contact import get_contact_service
+from app.infrastructure.di.container import get_container
+from app.infrastructure.repositories.firestore_contact_repository import (
+    FirestoreContactRepository,
+)
 from app.main import app as main_app
+from app.services.contact_service import ContactService
 
 
 @pytest.fixture(scope="session")
@@ -21,59 +30,50 @@ def event_loop():
 
 
 @pytest.fixture
-async def app(async_session: AsyncSession) -> AsyncGenerator[FastAPI, None]:
-    """Create FastAPI app instance for testing.
+async def firestore_client():
+    """Provide an AsyncClient backed by the local Firestore emulator.
 
-    エンドポイントは ``Depends(get_async_session)`` 経由で本番 DB に接続するため、
-    テスト用 SQLite セッションを返す override を差し込む。
+    Skips when FIRESTORE_EMULATOR_HOST is unset so the suite stays green in
+    environments without the emulator running (e.g. plain CI without GCP).
     """
+    if not os.environ.get("FIRESTORE_EMULATOR_HOST"):
+        pytest.skip("Firestore emulator not configured (FIRESTORE_EMULATOR_HOST unset)")
 
-    async def _override_get_async_session():
-        yield async_session
+    from google.cloud import firestore  # type: ignore[import-untyped]
 
-    main_app.dependency_overrides[get_async_session] = _override_get_async_session
-    try:
-        yield main_app
-    finally:
-        main_app.dependency_overrides.pop(get_async_session, None)
+    client = firestore.AsyncClient(project="test-project")
+    # Clean the collection between tests so cases stay isolated.
+    coll = client.collection("contacts")
+    async for doc in coll.stream():
+        await doc.reference.delete()
+    yield client
 
 
 @pytest.fixture
-async def client(app: FastAPI):
-    """Create an async test client."""
+async def app(firestore_client) -> AsyncGenerator[FastAPI, None]:
+    """FastAPI app with the contact_service dependency overridden to use the emulator."""
+
+    async def _override_get_contact_service() -> ContactService:
+        repo = FirestoreContactRepository(firestore_client)
+        email = get_container().email_service()
+        return ContactService(repo, email)
+
+    main_app.dependency_overrides[get_contact_service] = _override_get_contact_service
+    try:
+        yield main_app
+    finally:
+        main_app.dependency_overrides.pop(get_contact_service, None)
+
+
+@pytest.fixture
+async def client(app: FastAPI) -> AsyncGenerator[AsyncClient, None]:
+    """HTTPX async client bound to the test app."""
     async with AsyncClient(app=app, base_url="http://test") as ac:
         yield ac
 
 
 @pytest.fixture
-async def async_session() -> AsyncGenerator[AsyncSession, None]:
-    """Create an async database session for testing."""
-    # Use in-memory SQLite for testing
-    engine = create_async_engine(
-        "sqlite+aiosqlite:///:memory:",
-        poolclass=StaticPool,
-        connect_args={"check_same_thread": False},
-        echo=False,
-    )
-
-    # Create all tables
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-
-    # Create session
-    async_session_maker = async_sessionmaker(
-        engine, class_=AsyncSession, expire_on_commit=False
-    )
-
-    async with async_session_maker() as session:
-        yield session
-
-    # Clean up
-    await engine.dispose()
-
-
-@pytest.fixture
-def sample_contact_data():
+def sample_contact_data() -> dict[str, str]:
     """Sample contact form data for testing."""
     return {
         "name": "田中太郎",

@@ -39,10 +39,6 @@ npm run lint                # both sides
 npm run format              # both sides
 cd backend && uv run ruff check . && uv run ruff format .
 
-# Alembic migrations (backend)
-cd backend && uv run alembic revision --autogenerate -m "msg"
-cd backend && uv run alembic upgrade head
-
 # Local CI simulation / GitHub Actions via act
 npm run ci:local            # ./scripts/local-ci.sh
 npm run ci:act              # requires `npm run ci:setup-act` once

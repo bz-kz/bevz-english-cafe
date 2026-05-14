@@ -26,11 +26,6 @@ api/schemas    →  domain/repositories (interfaces)
 - `uv run pytest` は `pyproject.toml` で `asyncio_mode=auto` + coverage が常時 ON。追加フラグ不要。
 - mypy は `[tool.mypy]` 設定済。`strict=true` だが `include` は `app/domain` と `app/services` だけ（段階拡張中）。
 
-## マイグレーション
-
-- 既存の Japanese 名ファイル (`75cadcbcfeb8_変更内容の説明.py` 等) は **renamenai**。
-- 新規は `uv run alembic revision --autogenerate -m "<英語 slug>"`。
-
 ## コメント言語
 
 既存コードのコメント・docstring は日本語。周囲に合わせる（CLAUDE.md ルール）。

@@ -27,22 +27,15 @@ services:
     volumes:
       - ./backend:/app
     environment:
-      - DATABASE_URL=postgresql://postgres:password@postgres:5432/english_cafe_db
+      - FIRESTORE_EMULATOR_HOST=firestore-emulator:8080
+      - GCP_PROJECT_ID=english-cafe-dev
       - ENVIRONMENT=development
       - CORS_ORIGINS=http://localhost:3010
     depends_on:
-      - postgres
+      - firestore-emulator
 
-  postgres:
-    image: postgres:15-alpine
+  firestore-emulator:
+    image: gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators
+    command: ["gcloud", "emulators", "firestore", "start", "--host-port=0.0.0.0:8080", "--project=english-cafe-dev"]
     ports:
-      - "5442:5432"
-    environment:
-      - POSTGRES_DB=english_cafe_db
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=password
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-
-volumes:
-  postgres_data:
+      - "8080:8080"

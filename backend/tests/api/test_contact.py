@@ -1,22 +1,11 @@
 """Tests for Contact API endpoints."""
-import pytest
-from fastapi import FastAPI
 from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class TestContactAPI:
     """Contact API のテストケース"""
 
-    @pytest.fixture
-    async def client(self, app: FastAPI) -> AsyncClient:
-        """テスト用HTTPクライアント"""
-        async with AsyncClient(app=app, base_url="http://test") as client:
-            yield client
-
-    async def test_create_contact_success(
-        self, client: AsyncClient, async_session: AsyncSession
-    ):
+    async def test_create_contact_success(self, client: AsyncClient):
         """問い合わせ作成成功テスト"""
         # テストデータ
         contact_data = {
@@ -38,9 +27,7 @@ class TestContactAPI:
         assert "contact_id" in data
         assert len(data["contact_id"]) == 36  # UUID形式
 
-    async def test_create_contact_without_phone(
-        self, client: AsyncClient, async_session: AsyncSession
-    ):
+    async def test_create_contact_without_phone(self, client: AsyncClient):
         """電話番号なしの問い合わせ作成テスト"""
         contact_data = {
             "name": "佐藤花子",
@@ -56,9 +43,7 @@ class TestContactAPI:
         data = response.json()
         assert data["message"] == "お問い合わせを受け付けました。"
 
-    async def test_create_contact_invalid_email(
-        self, client: AsyncClient, async_session: AsyncSession
-    ):
+    async def test_create_contact_invalid_email(self, client: AsyncClient):
         """無効なメールアドレスでの問い合わせ作成テスト"""
         contact_data = {
             "name": "田中次郎",
@@ -72,9 +57,7 @@ class TestContactAPI:
 
         assert response.status_code == 422  # Validation error
 
-    async def test_create_contact_empty_name(
-        self, client: AsyncClient, async_session: AsyncSession
-    ):
+    async def test_create_contact_empty_name(self, client: AsyncClient):
         """空の名前での問い合わせ作成テスト"""
         contact_data = {
             "name": "",
@@ -88,9 +71,7 @@ class TestContactAPI:
 
         assert response.status_code == 422  # Validation error
 
-    async def test_create_contact_long_message(
-        self, client: AsyncClient, async_session: AsyncSession
-    ):
+    async def test_create_contact_long_message(self, client: AsyncClient):
         """長すぎるメッセージでの問い合わせ作成テスト"""
         contact_data = {
             "name": "長文太郎",
@@ -104,9 +85,7 @@ class TestContactAPI:
 
         assert response.status_code == 422  # Validation error
 
-    async def test_create_contact_invalid_phone(
-        self, client: AsyncClient, async_session: AsyncSession
-    ):
+    async def test_create_contact_invalid_phone(self, client: AsyncClient):
         """電話番号が不正形式の問い合わせ作成テスト (Pydantic 境界で 422)"""
         contact_data = {
             "name": "電話テスト",
@@ -121,9 +100,7 @@ class TestContactAPI:
 
         assert response.status_code == 422  # Validation error
 
-    async def test_create_contact_name_whitespace_stripped(
-        self, client: AsyncClient, async_session: AsyncSession
-    ):
+    async def test_create_contact_name_whitespace_stripped(self, client: AsyncClient):
         """名前の前後空白が str_strip_whitespace で除去されることをテスト"""
         contact_data = {
             "name": "  John  ",
@@ -142,9 +119,7 @@ class TestContactAPI:
         assert get_response.status_code == 200
         assert get_response.json()["name"] == "John"
 
-    async def test_create_contact_empty_string_name(
-        self, client: AsyncClient, async_session: AsyncSession
-    ):
+    async def test_create_contact_empty_string_name(self, client: AsyncClient):
         """空文字列の名前は str_strip_whitespace 後も min_length=1 で 422"""
         contact_data = {
             "name": "",
@@ -158,9 +133,7 @@ class TestContactAPI:
 
         assert response.status_code == 422  # Validation error
 
-    async def test_get_contact_success(
-        self, client: AsyncClient, async_session: AsyncSession
-    ):
+    async def test_get_contact_success(self, client: AsyncClient):
         """問い合わせ取得成功テスト"""
         # まず問い合わせを作成
         contact_data = {
@@ -189,9 +162,7 @@ class TestContactAPI:
         assert data["status"] == "pending"
         assert "created_at" in data
 
-    async def test_get_contact_not_found(
-        self, client: AsyncClient, async_session: AsyncSession
-    ):
+    async def test_get_contact_not_found(self, client: AsyncClient):
         """存在しない問い合わせの取得テスト"""
         fake_id = "123e4567-e89b-12d3-a456-426614174000"
 
@@ -201,9 +172,7 @@ class TestContactAPI:
         data = response.json()
         assert "指定された問い合わせが見つかりません" in data["detail"]
 
-    async def test_get_contact_invalid_uuid(
-        self, client: AsyncClient, async_session: AsyncSession
-    ):
+    async def test_get_contact_invalid_uuid(self, client: AsyncClient):
         """無効なUUIDでの問い合わせ取得テスト"""
         invalid_id = "invalid-uuid"
 

@@ -48,6 +48,9 @@ class Contact:
     processed_by: str | None = field(default=None)
     processing_notes: str | None = field(default=None)
 
+    # 認証済ユーザーとの関連 (匿名 submission は None のまま)
+    user_id: str | None = field(default=None)
+
     # ドメインイベント
     _domain_events: list[DomainEvent] = field(default_factory=list, init=False)
 

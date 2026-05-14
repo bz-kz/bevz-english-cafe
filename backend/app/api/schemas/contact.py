@@ -55,6 +55,9 @@ class ContactResponse(BaseModel):
     message: str = Field(..., description="メッセージ")
     status: str = Field(..., description="ステータス")
     created_at: str = Field(..., description="作成日時")
+    user_id: str | None = Field(
+        None, description="認証済ユーザーの UID (匿名問い合わせの場合は null)"
+    )
 
     model_config = {
         "json_schema_extra": {

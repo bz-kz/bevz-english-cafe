@@ -104,6 +104,7 @@ class FirestoreContactRepository(ContactRepository):
             "processed_at": contact.processed_at,
             "processed_by": contact.processed_by,
             "processing_notes": contact.processing_notes,
+            "user_id": contact.user_id,
         }
 
     @staticmethod
@@ -130,4 +131,5 @@ class FirestoreContactRepository(ContactRepository):
             processed_at=data.get("processed_at"),
             processed_by=data.get("processed_by"),
             processing_notes=data.get("processing_notes"),
+            user_id=data.get("user_id"),
         )

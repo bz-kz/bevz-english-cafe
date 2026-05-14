@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import ConfigDict
 from pydantic_settings import BaseSettings
 
@@ -40,6 +42,13 @@ class Settings(BaseSettings):
     secret_key: str = "your-secret-key-change-in-production"
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
+
+    # --- GCP / Firestore (Phase A migration) ---
+    gcp_project_id: str = "english-cafe-496209"
+    firestore_emulator_host: str | None = (
+        None  # read for documentation; SDK auto-detects
+    )
+    repository_backend: Literal["sqlalchemy", "firestore"] = "sqlalchemy"
 
     model_config = ConfigDict(env_file=".env", case_sensitive=False)
 

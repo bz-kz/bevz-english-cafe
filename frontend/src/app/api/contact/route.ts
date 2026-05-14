@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    
+
     // フィールド名をバックエンドAPIの形式に変換
     const backendPayload = {
       name: body.name,
@@ -13,9 +13,14 @@ export async function POST(request: NextRequest) {
       lesson_type: body.lessonType,
       preferred_contact: body.preferredContact,
     };
-    
-    // バックエンドAPIに転送
-    const backendUrl = process.env.BACKEND_URL || 'http://backend:8000';
+
+    // バックエンドAPIに転送。Phase C 以降は Cloud Run の api.bz-kz.com を
+    // `NEXT_PUBLIC_API_URL` で受ける。`BACKEND_URL` は docker-compose の
+    // local dev (`http://backend:8000`) 用の上書きとして残す。
+    const backendUrl =
+      process.env.BACKEND_URL ||
+      process.env.NEXT_PUBLIC_API_URL ||
+      'http://backend:8000';
     const response = await fetch(`${backendUrl}/api/v1/contacts/`, {
       method: 'POST',
       headers: {

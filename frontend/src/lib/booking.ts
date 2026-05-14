@@ -40,6 +40,7 @@ export interface Booking {
 }
 
 async function authHeaders(): Promise<Record<string, string>> {
+  await firebaseAuth.authStateReady();
   const user = firebaseAuth.currentUser;
   if (!user) return {};
   const token = await user.getIdToken();

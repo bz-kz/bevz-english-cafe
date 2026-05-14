@@ -6,6 +6,7 @@ import {
   type CreateSlotInput,
   type LessonType,
 } from '@/lib/booking';
+import { useNotificationStore } from '@/stores/notificationStore';
 
 const TYPES: { value: LessonType; label: string }[] = [
   { value: 'group', label: 'グループ' },
@@ -17,7 +18,11 @@ const TYPES: { value: LessonType; label: string }[] = [
   { value: 'other', label: 'その他' },
 ];
 
-export function SlotForm({ onCreated }: { onCreated: () => void }) {
+export function SlotForm({
+  onCreated,
+}: {
+  onCreated: () => void | Promise<void>;
+}) {
   const [startAt, setStartAt] = useState('');
   const [endAt, setEndAt] = useState('');
   const [lessonType, setLessonType] = useState<LessonType>('group');
@@ -26,27 +31,45 @@ export function SlotForm({ onCreated }: { onCreated: () => void }) {
   const [notes, setNotes] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const notify = useNotificationStore();
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+
+    const start = new Date(startAt);
+    const end = new Date(endAt);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+      setError('開始と終了の日時を正しく入力してください');
+      return;
+    }
+    if (end <= start) {
+      setError('終了は開始より後の時刻にしてください');
+      return;
+    }
+
     setBusy(true);
     try {
       const input: CreateSlotInput = {
-        start_at: new Date(startAt).toISOString(),
-        end_at: new Date(endAt).toISOString(),
+        start_at: start.toISOString(),
+        end_at: end.toISOString(),
         lesson_type: lessonType,
         capacity,
         price_yen: priceYen ? parseInt(priceYen, 10) : null,
         notes: notes || null,
       };
       await adminCreateSlot(input);
+      notify.success('枠を追加しました');
       setStartAt('');
       setEndAt('');
       setCapacity(4);
       setPriceYen('');
       setNotes('');
-      onCreated();
+      try {
+        await onCreated();
+      } catch (refreshErr) {
+        console.warn('refresh after create failed', refreshErr);
+      }
     } catch (e: unknown) {
       const detail = (e as { response?: { data?: { detail?: string } } })
         .response?.data?.detail;

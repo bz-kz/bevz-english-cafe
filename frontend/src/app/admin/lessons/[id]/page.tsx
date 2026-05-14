@@ -9,6 +9,7 @@ import {
   type LessonSlot,
 } from '@/lib/booking';
 import { firebaseAuth } from '@/lib/firebase';
+import { useNotificationStore } from '@/stores/notificationStore';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8010';
 
@@ -23,11 +24,13 @@ export default function AdminLessonEditPage() {
   const params = useParams<{ id: string }>();
   const id = params?.id;
   const router = useRouter();
+  const notify = useNotificationStore();
   const [slot, setSlot] = useState<LessonSlot | null>(null);
   const [bookings, setBookings] = useState<AdminBookingRow[]>([]);
   const [teacherId, setTeacherId] = useState('');
   const [notes, setNotes] = useState('');
   const [capacity, setCapacity] = useState(0);
+  const [busy, setBusy] = useState<null | 'save' | 'close' | 'delete'>(null);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -55,17 +58,30 @@ export default function AdminLessonEditPage() {
   if (!slot) return <p>読み込み中…</p>;
 
   const handleSave = async () => {
-    await adminUpdateSlot(slot.id, {
-      teacher_id: teacherId || null,
-      notes: notes || null,
-      capacity,
-    });
-    await load();
+    setBusy('save');
+    try {
+      await adminUpdateSlot(slot.id, {
+        teacher_id: teacherId || null,
+        notes: notes || null,
+        capacity,
+      });
+      notify.success('保存しました');
+      await load();
+    } finally {
+      setBusy(null);
+    }
   };
 
   const handleClose = async () => {
-    await adminUpdateSlot(slot.id, { status: 'closed' });
-    await load();
+    if (!confirm('この枠を閉じますか? (一覧から非表示になります)')) return;
+    setBusy('close');
+    try {
+      await adminUpdateSlot(slot.id, { status: 'closed' });
+      notify.success('枠を閉じました');
+      router.push('/admin/lessons');
+    } finally {
+      setBusy(null);
+    }
   };
 
   const handleDelete = async () => {
@@ -75,8 +91,14 @@ export default function AdminLessonEditPage() {
       !confirm(`${confirmed} 件の確定予約があります。強制削除しますか?`)
     )
       return;
-    await adminDeleteSlot(slot.id, confirmed > 0);
-    router.push('/admin/lessons');
+    setBusy('delete');
+    try {
+      await adminDeleteSlot(slot.id, confirmed > 0);
+      notify.success('枠を削除しました');
+      router.push('/admin/lessons');
+    } finally {
+      setBusy(null);
+    }
   };
 
   return (
@@ -129,21 +151,26 @@ export default function AdminLessonEditPage() {
         <div className="flex gap-2">
           <button
             onClick={handleSave}
-            className="rounded bg-blue-600 px-3 py-2 text-sm text-white"
+            disabled={busy !== null}
+            className="rounded bg-blue-600 px-3 py-2 text-sm text-white disabled:opacity-50"
           >
-            保存
+            {busy === 'save' ? '保存中…' : '保存'}
           </button>
-          <button
-            onClick={handleClose}
-            className="rounded border px-3 py-2 text-sm"
-          >
-            枠を閉じる
-          </button>
+          {slot.status === 'open' && (
+            <button
+              onClick={handleClose}
+              disabled={busy !== null}
+              className="rounded border px-3 py-2 text-sm disabled:opacity-50"
+            >
+              {busy === 'close' ? '閉じています…' : '枠を閉じる'}
+            </button>
+          )}
           <button
             onClick={handleDelete}
-            className="rounded border px-3 py-2 text-sm text-red-600"
+            disabled={busy !== null}
+            className="rounded border px-3 py-2 text-sm text-red-600 disabled:opacity-50"
           >
-            枠を削除
+            {busy === 'delete' ? '削除中…' : '枠を削除'}
           </button>
         </div>
       </div>

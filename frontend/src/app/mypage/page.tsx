@@ -6,6 +6,7 @@ import axios from 'axios';
 import { useAuth } from '@/hooks/useAuth';
 import { ProfileCard } from './_components/ProfileCard';
 import { ContactHistory } from './_components/ContactHistory';
+import { BookingsList } from './_components/BookingsList';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8010';
 
@@ -59,6 +60,7 @@ export default function MyPage() {
     <div className="mx-auto max-w-3xl space-y-6 p-6">
       <h1 className="text-3xl font-bold">マイページ</h1>
       <ProfileCard profile={profile} />
+      <BookingsList />
       <ContactHistory contacts={contacts} />
     </div>
   );

@@ -2,16 +2,17 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import { useAuth } from '@/hooks/useAuth';
+import { useAuthStore } from '@/stores/authStore';
 
 const Header = () => {
-  const { user, signOut } = useAuth();
+  const { user, isAdmin, signOut } = useAuthStore();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const navigation = [
     { name: 'ホーム', href: '/' },
     { name: '講師紹介', href: '/instructors' },
     { name: 'レッスン', href: '/lessons' },
+    { name: '予約', href: '/book' },
     { name: '動画', href: '/videos' },
     { name: 'お問い合わせ', href: '/contact' },
   ];
@@ -61,6 +62,14 @@ const Header = () => {
                   >
                     マイページ
                   </Link>
+                  {isAdmin && (
+                    <Link
+                      href="/admin/lessons"
+                      className="block px-3 py-2 text-sm hover:bg-gray-50"
+                    >
+                      Admin
+                    </Link>
+                  )}
                   <button
                     type="button"
                     onClick={() => signOut()}

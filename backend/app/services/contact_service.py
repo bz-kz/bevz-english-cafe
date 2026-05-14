@@ -29,6 +29,7 @@ class ContactService:
         lesson_type: str,
         preferred_contact: str,
         message: str,
+        user_id: str | None = None,
     ) -> Contact:
         """新しい問い合わせを作成"""
         try:
@@ -48,6 +49,7 @@ class ContactService:
                 lesson_type=lesson_type_enum,
                 preferred_contact=preferred_contact_enum,
                 message=message,
+                user_id=user_id,
             )
 
             # データベースに保存

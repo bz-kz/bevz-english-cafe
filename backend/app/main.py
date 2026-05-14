@@ -1,11 +1,13 @@
 import logging
 from contextlib import asynccontextmanager
 
+import firebase_admin
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .api.endpoints.contact import router as contact_router
+from .api.endpoints.users import router as users_router
 from .config import get_settings
 from .infrastructure.di.container import get_container
 
@@ -22,6 +24,11 @@ async def lifespan(app: FastAPI):
     """アプリケーションのライフサイクル管理"""
     # 起動時の処理
     logger.info("英会話カフェ API starting up...")
+
+    # Firebase Admin SDK 初期化 (ADC; FIREBASE_AUTH_EMULATOR_HOST も SDK が auto-detect)
+    if not firebase_admin._apps:
+        firebase_admin.initialize_app()
+        logger.info("Firebase Admin SDK initialized")
 
     # DIコンテナの初期化
     get_container()
@@ -95,6 +102,7 @@ async def root():
 
 # APIルーターの登録
 app.include_router(contact_router, prefix="/api/v1")
+app.include_router(users_router)
 
 
 if __name__ == "__main__":

@@ -6,11 +6,15 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import axios from 'axios';
 import { useNotificationStore } from '@/stores/notificationStore';
 import { Input, Textarea, Select, Button, Spinner } from '@/components/ui';
 import { contactApi } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { contactFormSchema, type ContactFormValues } from '@/schemas/contact';
+import { useAuth } from '@/hooks/useAuth';
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8010';
 
 type ContactFormData = ContactFormValues;
 
@@ -49,6 +53,7 @@ interface ContactFormProps {
 
 export function ContactForm({ className, onSuccess }: ContactFormProps) {
   const { addNotification } = useNotificationStore();
+  const { user } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -64,6 +69,27 @@ export function ContactForm({ className, onSuccess }: ContactFormProps) {
   const [errors, setErrors] = useState<FormErrors>({});
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [isFormValid, setIsFormValid] = useState(false);
+
+  // ログイン中ならプロフィールから事前入力
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      try {
+        const token = await user.getIdToken();
+        const resp = await axios.get(`${API_BASE}/api/v1/users/me`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        setFormData(prev => ({
+          ...prev,
+          name: prev.name || resp.data.name || '',
+          email: prev.email || resp.data.email || '',
+          phone: prev.phone || resp.data.phone || '',
+        }));
+      } catch {
+        // signup 未完 / API 失敗時は何もせず空のまま続行
+      }
+    })();
+  }, [user]);
 
   // zod スキーマを使った単一フィールドバリデーション
   // 空文字の lessonType など、スキーマ自体が許容するケースは追加の

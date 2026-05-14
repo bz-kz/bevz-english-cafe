@@ -1,15 +1,20 @@
 import type { Metadata } from 'next';
 import { Inter, Noto_Sans_JP } from 'next/font/google';
 import './globals.css';
+import '@/stores/authStore'; // mounts onAuthStateChanged subscription on hydration
 import Layout from '@/components/layout/Layout';
 import { EventProvider } from '@/providers/EventProvider';
 import { PerformanceProvider } from '@/providers/PerformanceProvider';
 import { ToastContainer } from '@/components/ui/Toast';
-import { generatePageMetadata, generateOrganizationSchema, generateLocalBusinessSchema } from '@/utils/metadata';
+import {
+  generatePageMetadata,
+  generateOrganizationSchema,
+  generateLocalBusinessSchema,
+} from '@/utils/metadata';
 import { StructuredData } from '@/components/seo/StructuredData';
 import { GoogleAnalytics } from '@/components/analytics/GoogleAnalytics';
 
-const inter = Inter({ 
+const inter = Inter({
   subsets: ['latin'],
   variable: '--font-inter',
   display: 'swap',
@@ -45,7 +50,9 @@ export default function RootLayout({
         <StructuredData data={generateLocalBusinessSchema()} />
       </head>
       <body className={inter.className}>
-        <GoogleAnalytics measurementId={process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID || ''} />
+        <GoogleAnalytics
+          measurementId={process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID || ''}
+        />
         <PerformanceProvider>
           <EventProvider>
             <Layout>{children}</Layout>

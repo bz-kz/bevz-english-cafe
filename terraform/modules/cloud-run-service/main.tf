@@ -19,6 +19,14 @@ resource "google_project_iam_member" "runtime_firestore" {
   member = "serviceAccount:${google_service_account.runtime.email}"
 }
 
+# Firebase Admin SDK uses this role to call verify_id_token on inbound
+# requests. Without it the SDK fails with 403 PERMISSION_DENIED.
+resource "google_project_iam_member" "runtime_firebase_auth_viewer" {
+  project = var.gcp_project_id
+  role    = "roles/firebaseauth.viewer"
+  member  = "serviceAccount:${google_service_account.runtime.email}"
+}
+
 resource "google_cloud_run_v2_service" "this" {
   project  = var.gcp_project_id
   location = var.region

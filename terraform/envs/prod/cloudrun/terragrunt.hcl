@@ -39,5 +39,6 @@ inputs = {
     GCP_PROJECT_ID     = local.env.locals.gcp_project_id
     REPOSITORY_BACKEND = "firestore"
     ENVIRONMENT        = "production"
+    CORS_ORIGINS       = "https://english-cafe.bz-kz.com"
   }
 }

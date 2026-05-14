@@ -39,8 +39,8 @@ def test_build_target_slots_each_slot_is_30_min() -> None:
 def test_build_target_slots_defaults() -> None:
     target = datetime(2026, 6, 15, tzinfo=JST).date()
     slot = build_target_slots(target)[0]
-    assert slot["lesson_type"] == "private"
-    assert slot["capacity"] == 1
+    assert slot["lesson_type"] == "group"
+    assert slot["capacity"] == 5
     assert slot["booked_count"] == 0
     assert slot["price_yen"] is None
     assert slot["teacher_id"] is None

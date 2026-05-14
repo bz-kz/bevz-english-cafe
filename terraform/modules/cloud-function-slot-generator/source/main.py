@@ -51,8 +51,8 @@ def build_target_slots(target_date: date) -> list[dict[str, Any]]:
                 {
                     "start_at": start_jst,
                     "end_at": end_jst,
-                    "lesson_type": "private",
-                    "capacity": 1,
+                    "lesson_type": "group",
+                    "capacity": 5,
                     "booked_count": 0,
                     "price_yen": None,
                     "teacher_id": None,

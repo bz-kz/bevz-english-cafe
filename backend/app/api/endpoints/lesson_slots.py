@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from typing import Annotated, Any
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.api.dependencies.auth import get_admin_user
 from app.api.dependencies.repositories import (
@@ -65,12 +65,17 @@ def _admin(slot: LessonSlot) -> LessonSlotAdminResponse:
 
 
 @router.get("/lesson-slots", response_model=list[LessonSlotPublicResponse])
-async def list_open_slots(
+async def list_slots(
     repo: Annotated[LessonSlotRepository, Depends(get_lesson_slot_repository)],
+    from_: Annotated[datetime | None, Query(alias="from")] = None,
+    to: Annotated[datetime | None, Query()] = None,
     limit: int = 50,
     offset: int = 0,
 ) -> list[LessonSlotPublicResponse]:
-    slots = await repo.find_open_future(limit=limit, offset=offset)
+    if from_ is not None and to is not None:
+        slots = await repo.find_in_range(from_=from_, to_=to)
+    else:
+        slots = await repo.find_open_future(limit=limit, offset=offset)
     return [_public(s) for s in slots]
 
 

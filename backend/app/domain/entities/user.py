@@ -22,6 +22,9 @@ class User:
     email: str
     name: str
     phone: Phone | None = None
+    # is_admin は Firebase Auth の custom claim から hydrate される runtime 値。
+    # Firestore には永続化しない (auth.py の get_current_user 参照)。
+    is_admin: bool = False
     created_at: datetime = field(default_factory=_utc_now)
     updated_at: datetime = field(default_factory=_utc_now)
 

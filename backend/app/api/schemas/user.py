@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, EmailStr, Field
 
@@ -25,11 +26,20 @@ class UserUpdate(BaseModel):
     phone: str | None = Field(default=None, max_length=20)
 
 
+class MonthQuotaSummary(BaseModel):
+    granted: int
+    used: int
+    remaining: int
+
+
 class UserResponse(BaseModel):
     uid: str
     email: EmailStr
     name: str
     phone: str | None
+    plan: Literal["light", "standard", "intensive"] | None = None
+    trial_used: bool = False
+    current_month_quota: MonthQuotaSummary | None = None
     created_at: datetime
     updated_at: datetime
 

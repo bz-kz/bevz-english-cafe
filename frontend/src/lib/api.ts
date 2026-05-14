@@ -5,6 +5,8 @@
 
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 
+import { firebaseAuth } from '@/lib/firebase';
+
 // API設定
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8010';
 const API_TIMEOUT = 30000; // 30秒
@@ -21,14 +23,13 @@ const apiClient: AxiosInstance = axios.create({
 
 // リクエストインターセプター
 apiClient.interceptors.request.use(
-  config => {
-    // リクエスト送信前の処理
+  async config => {
     console.log(`API Request: ${config.method?.toUpperCase()} ${config.url}`);
 
-    // 認証トークンがある場合は追加
-    const token =
-      typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-    if (token) {
+    // Firebase Auth が ID Token を発行している場合は Bearer ヘッダーを付ける
+    const user = firebaseAuth.currentUser;
+    if (user) {
+      const token = await user.getIdToken();
       config.headers.Authorization = `Bearer ${token}`;
     }
 

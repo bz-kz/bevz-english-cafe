@@ -94,3 +94,69 @@ class TestFindOpenFuture:
         assert len(results) == 1
         assert results[0].status == SlotStatus.OPEN
         assert results[0].start_at > _now()
+
+
+async def test_find_in_range_returns_slots_regardless_of_status(
+    repo: FirestoreLessonSlotRepository,
+) -> None:
+    base = datetime(2026, 6, 1, 9, 0, tzinfo=UTC)
+    open_slot = LessonSlot(
+        id=uuid4(),
+        start_at=base,
+        end_at=base + timedelta(minutes=30),
+        lesson_type=LessonType.PRIVATE,
+        capacity=1,
+        booked_count=0,
+        price_yen=None,
+        teacher_id=None,
+        notes=None,
+        status=SlotStatus.OPEN,
+    )
+    closed_slot = LessonSlot(
+        id=uuid4(),
+        start_at=base + timedelta(hours=1),
+        end_at=base + timedelta(hours=1, minutes=30),
+        lesson_type=LessonType.PRIVATE,
+        capacity=1,
+        booked_count=0,
+        price_yen=None,
+        teacher_id=None,
+        notes=None,
+        status=SlotStatus.CLOSED,
+    )
+    cancelled = LessonSlot(
+        id=uuid4(),
+        start_at=base + timedelta(hours=2),
+        end_at=base + timedelta(hours=2, minutes=30),
+        lesson_type=LessonType.PRIVATE,
+        capacity=1,
+        booked_count=0,
+        price_yen=None,
+        teacher_id=None,
+        notes=None,
+        status=SlotStatus.CANCELLED,
+    )
+    out_of_range = LessonSlot(
+        id=uuid4(),
+        start_at=base + timedelta(days=30),
+        end_at=base + timedelta(days=30, minutes=30),
+        lesson_type=LessonType.PRIVATE,
+        capacity=1,
+        booked_count=0,
+        price_yen=None,
+        teacher_id=None,
+        notes=None,
+        status=SlotStatus.OPEN,
+    )
+    for s in (open_slot, closed_slot, cancelled, out_of_range):
+        await repo.save(s)
+
+    result = await repo.find_in_range(
+        from_=base,
+        to_=base + timedelta(days=1),
+    )
+    result_ids = {s.id for s in result}
+    assert open_slot.id in result_ids
+    assert closed_slot.id in result_ids
+    assert cancelled.id not in result_ids
+    assert out_of_range.id not in result_ids

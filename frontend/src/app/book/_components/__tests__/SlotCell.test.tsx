@@ -94,14 +94,16 @@ describe('SlotCell', () => {
     expect(onClick).not.toHaveBeenCalled();
   });
 
-  it('renders ▲ for within24h state and is clickable', () => {
+  it('renders × for within24h state and is NOT clickable', () => {
     const onClick = jest.fn();
     const s = slot();
     render(
       <SlotCell state={{ kind: 'within24h', slot: s }} onClick={onClick} />
     );
-    expect(screen.getByText('▲')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button'));
-    expect(onClick).toHaveBeenCalledWith(s);
+    const cell = screen.getByText('×');
+    expect(cell).toBeInTheDocument();
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    fireEvent.click(cell);
+    expect(onClick).not.toHaveBeenCalled();
   });
 });

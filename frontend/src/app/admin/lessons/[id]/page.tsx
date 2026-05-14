@@ -16,8 +16,11 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8010';
 interface AdminBookingRow {
   id: string;
   user_id: string;
+  user_name: string | null;
+  user_email: string | null;
   status: string;
   created_at: string;
+  cancelled_at: string | null;
 }
 
 export default function AdminLessonEditPage() {
@@ -183,7 +186,8 @@ export default function AdminLessonEditPage() {
           <table className="w-full text-sm">
             <thead className="border-b text-left">
               <tr>
-                <th className="py-2">ユーザー</th>
+                <th className="py-2">名前</th>
+                <th>メール</th>
                 <th>状態</th>
                 <th>予約日時</th>
               </tr>
@@ -191,8 +195,21 @@ export default function AdminLessonEditPage() {
             <tbody>
               {bookings.map(b => (
                 <tr key={b.id} className="border-b">
-                  <td className="py-2">{b.user_id}</td>
-                  <td>{b.status}</td>
+                  <td className="py-2">
+                    {b.user_name ?? (
+                      <span className="text-gray-400">{b.user_id}</span>
+                    )}
+                  </td>
+                  <td>
+                    {b.user_email ?? <span className="text-gray-400">—</span>}
+                  </td>
+                  <td>
+                    {b.status === 'confirmed' ? (
+                      <span className="text-green-700">確定</span>
+                    ) : (
+                      <span className="text-red-600">キャンセル済</span>
+                    )}
+                  </td>
                   <td>{new Date(b.created_at).toLocaleString('ja-JP')}</td>
                 </tr>
               ))}

@@ -1,9 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { listOpenSlots, type LessonSlot } from '@/lib/booking';
-import { SlotForm } from './_components/SlotForm';
 
 const TYPE_LABEL: Record<LessonSlot['lesson_type'], string> = {
   trial: '無料体験',
@@ -18,17 +17,20 @@ const TYPE_LABEL: Record<LessonSlot['lesson_type'], string> = {
 export default function AdminLessonsPage() {
   const [slots, setSlots] = useState<LessonSlot[]>([]);
 
-  const refresh = useCallback(async () => {
-    setSlots(await listOpenSlots());
-  }, []);
-
   useEffect(() => {
-    refresh();
-  }, [refresh]);
+    (async () => {
+      setSlots(await listOpenSlots());
+    })();
+  }, []);
 
   return (
     <div className="space-y-6">
-      <SlotForm onCreated={refresh} />
+      <section>
+        <p className="text-sm text-gray-600">
+          枠は毎日 0:00 JST に自動生成されます (14
+          日先まで)。個別の編集・閉鎖は各枠の「編集」から。
+        </p>
+      </section>
       <section>
         <h2 className="mb-2 text-lg font-semibold">予約可能な枠</h2>
         <table className="w-full text-sm">

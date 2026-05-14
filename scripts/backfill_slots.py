@@ -33,8 +33,8 @@ def _build_slots(target: date) -> list[dict]:
                 {
                     "start_at": start,
                     "end_at": start + timedelta(minutes=30),
-                    "lesson_type": "private",
-                    "capacity": 1,
+                    "lesson_type": "group",
+                    "capacity": 5,
                     "booked_count": 0,
                     "price_yen": None,
                     "teacher_id": None,

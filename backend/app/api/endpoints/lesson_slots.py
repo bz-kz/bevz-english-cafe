@@ -12,6 +12,7 @@ from app.api.dependencies.auth import get_admin_user
 from app.api.dependencies.repositories import (
     get_booking_repository,
     get_lesson_slot_repository,
+    get_user_repository,
 )
 from app.api.schemas.lesson_slot import (
     LessonSlotAdminResponse,
@@ -25,6 +26,7 @@ from app.domain.enums.contact import LessonType
 from app.domain.enums.lesson_booking import BookingStatus, SlotStatus
 from app.domain.repositories.booking_repository import BookingRepository
 from app.domain.repositories.lesson_slot_repository import LessonSlotRepository
+from app.domain.repositories.user_repository import UserRepository
 
 router = APIRouter(prefix="/api/v1", tags=["lesson-slots"])
 
@@ -191,14 +193,24 @@ async def admin_list_bookings_for_slot(
     slot_id: UUID,
     admin: Annotated[User, Depends(get_admin_user)],
     booking_repo: Annotated[BookingRepository, Depends(get_booking_repository)],
+    user_repo: Annotated[UserRepository, Depends(get_user_repository)],
 ) -> list[dict[str, Any]]:
     bookings = await booking_repo.find_by_slot(str(slot_id))
-    return [
-        {
-            "id": str(b.id),
-            "user_id": b.user_id,
-            "status": b.status.value,
-            "created_at": b.created_at.isoformat(),
-        }
-        for b in bookings
-    ]
+    user_cache: dict[str, User | None] = {}
+    rows: list[dict[str, Any]] = []
+    for b in bookings:
+        if b.user_id not in user_cache:
+            user_cache[b.user_id] = await user_repo.find_by_uid(b.user_id)
+        user = user_cache[b.user_id]
+        rows.append(
+            {
+                "id": str(b.id),
+                "user_id": b.user_id,
+                "user_name": user.name if user else None,
+                "user_email": user.email if user else None,
+                "status": b.status.value,
+                "created_at": b.created_at.isoformat(),
+                "cancelled_at": b.cancelled_at.isoformat() if b.cancelled_at else None,
+            }
+        )
+    return rows

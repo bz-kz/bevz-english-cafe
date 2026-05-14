@@ -1,8 +1,8 @@
 # Cloud Run + Firestore bootstrap checklist
 
-Step-by-step procedure to bring up the GCP-side infrastructure that the migrated FastAPI backend runs on. Run **once** by a human with sufficient GCP IAM. After this, HCP Terraform handles re-applies via Workload Identity Federation (WIF), no SA JSON keys.
+Step-by-step procedure to bring up the GCP-side infrastructure that the FastAPI backend runs on. Run **once** by a human with sufficient GCP IAM. After this, HCP Terraform handles re-applies via Workload Identity Federation (WIF), no SA JSON keys.
 
-Repo state assumed at start: `001-ai` branch contains commits `228b23f` (Phase A backend) and `d5917bd` (Phase B terraform stacks).
+> **Historical narrative**: this doc was written during the live Render → Cloud Run + Firestore migration. Phase D removed the SQLAlchemy code path and the `REPOSITORY_BACKEND` env var. The Phase C "flip" step (step 9 below) and rollback references that mention `REPOSITORY_BACKEND=sqlalchemy` are historical only — they no longer apply. For a fresh setup, skip step 9; Firestore is the only backend.
 
 ## Prerequisites
 
@@ -370,9 +370,9 @@ End-to-end:
 
 ## 11. After Phase C is verified stable
 
-- Render service can be deleted (the `render.yaml` removal is already staged for that step)
-- Phase D (SQLAlchemy / Alembic / Postgres dead-code removal) can proceed safely — no rollback path needed after that point
-- Set up CI/CD (Phase E) so backend changes auto-build images and update `image` on the Cloud Run service
+- ~~Render service can be deleted~~ — already removed; `render.yaml` is gone from the repo.
+- ~~Phase D (SQLAlchemy / Alembic / Postgres dead-code removal)~~ — completed in commit `5913c50`. The SQLAlchemy compatibility shim no longer exists, so the rollback row for "Step 9" below is historical only.
+- Set up CI/CD so backend changes auto-build images and update `image` on the Cloud Run service (not yet done — see "Phase E" / GitHub Actions WIF auto-deploy notes elsewhere).
 
 ---
 
@@ -382,7 +382,7 @@ End-to-end:
 |---|---|---|
 | Steps 1-6 | DNS not propagating, cert pending | Wait, or re-create domain mapping. No prod impact. |
 | Steps 7-8 | Image fails to start | Update `image` workspace var back to the hello sample. The service stays up. |
-| Step 9 | Firestore write fails | Edit cloudrun `terragrunt.hcl` back to `REPOSITORY_BACKEND = "sqlalchemy"`, apply. **However**: Cloud Run cannot reach the old Render Postgres, so the contact endpoint will 500 either way. This rollback is only useful pre-Phase-D. |
+| Step 9 | Firestore write fails | **Historical**: before Phase D, you could flip `REPOSITORY_BACKEND` back to `"sqlalchemy"` — but Cloud Run never had Postgres reachability, so this was always cosmetic. Phase D removed the switch entirely. To recover today, debug the Firestore client / IAM directly. |
 | Step 10 | Frontend can't reach api.bz-kz.com | Remove `NEXT_PUBLIC_API_URL` from Vercel workspace var, apply. Frontend falls back to its proxy `/api/*` → which still points at the old `process.env.BACKEND_URL` value on Vercel (if any). |
 
 ---

@@ -10,7 +10,8 @@ FastAPI + Python 3.12, managed by **uv** (pip 禁止). See `../CLAUDE.md` for th
 api/endpoints  →  services        →  domain/entities + value_objects + enums
 api/schemas    →  domain/repositories (interfaces)
                   ↑ implemented by
-              infrastructure/repositories (SQLAlchemy)
+              infrastructure/repositories (FirestoreContactRepository)
+              infrastructure/database     (firestore_client.py — AsyncClient factory)
               infrastructure/event_bus    (in-memory pub/sub)
               infrastructure/event_handlers
               infrastructure/di/container (composition root)
@@ -18,7 +19,8 @@ api/schemas    →  domain/repositories (interfaces)
 
 - `app/repositories/` という空ディレクトリには絶対に何も置かない。リポジトリは `app/domain/repositories/`（インターフェイス）と `app/infrastructure/repositories/`（実装）の 2 か所のみ。
 - Enums は `app/domain/enums/` 配下。entity ファイルに enum を同居させない。
-- DI コンテナ (`app/infrastructure/di/container.py`) はシングルトン群（event_bus, email_service, handlers）だけ保持。session を必要とする repository / service は endpoint 側で per-request 組み立て。
+- DI コンテナ (`app/infrastructure/di/container.py`) はシングルトン群（event_bus, email_service, handlers）だけ保持。repository / service は endpoint 側で per-request 組み立て (`get_contact_service` → `FirestoreContactRepository(get_firestore_client())`)。
+- Firestore Emulator はローカル開発で `docker-compose.yml` の `firestore-emulator` サービスが提供。SDK は `FIRESTORE_EMULATOR_HOST` を auto-detect。
 
 ## ツール
 

@@ -9,8 +9,8 @@ npm-workspaces monorepo for an English-conversation cafe marketing site.
 - `frontend/` — Next.js 14 App Router + TypeScript + Tailwind + Zustand. Runs on `:3010`.
 - `backend/` — FastAPI on Python 3.12, managed by **uv** (not pip/poetry). Runs on `:8010`.
 - `shared/types/` and `shared/constants/` — TypeScript types/config intended to be shared (only frontend imports them today).
-- `terraform/` — infra for the production environment (Render + monitoring).
-- `docker-compose.yml` — local dev wiring frontend + backend + Postgres 15.
+- `terraform/` — HCP Terraform + Terragrunt stacks for the production environment (Vercel + GCP WIF + Firestore + Cloud Run + billing killswitch).
+- `docker-compose.yml` — local dev wiring frontend + backend + Firestore Emulator (gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators).
 
 The root `package.json` is the orchestrator; almost every developer command is `npm run <script>` at the repo root, which `cd`s into the right workspace. `Makefile` is a thin alias layer over those npm scripts.
 
@@ -22,7 +22,7 @@ Use uv for backend Python, not pip. Use the root scripts unless you need to debu
 # First-time setup (installs frontend deps + uv sync for backend)
 npm run setup
 
-# Dev (docker-compose: frontend + backend + postgres)
+# Dev (docker-compose: frontend + backend + firestore-emulator)
 npm run dev                 # = docker-compose up -d
 npm run dev:frontend        # next dev on 0.0.0.0:3010
 npm run dev:backend         # uv run uvicorn app.main:app --reload --port 8010
@@ -56,15 +56,15 @@ The backend is intentionally layered. Respect the direction of dependencies (out
 api/endpoints      →  services        →  domain/entities + value_objects
 api/schemas        →  domain/repositories (interfaces)
                        ↑ implemented by
-                   infrastructure/repositories  (SQLAlchemy)
+                   infrastructure/repositories  (FirestoreContactRepository)
                    infrastructure/event_bus     (in-memory pub/sub)
-                   infrastructure/database      (async session)
+                   infrastructure/database      (firestore_client.py — AsyncClient factory)
                    infrastructure/di/container  (composition root)
 ```
 
-Domain entities (`app/domain/entities/contact.py`) raise `DomainEvent`s; the `InMemoryEventBus` dispatches them to handlers registered in `infrastructure/event_handlers/`. Domain enums live in `app/domain/enums/` (split from entities in Stage B5). The `Container` in `app/infrastructure/di/container.py` is the composition root and holds singletons (event_bus, email_service, handlers); session-scoped repositories are composed per-request in endpoint dependencies.
+Domain entities (`app/domain/entities/contact.py`) raise `DomainEvent`s; the `InMemoryEventBus` dispatches them to handlers registered in `infrastructure/event_handlers/`. Domain enums live in `app/domain/enums/`. The `Container` in `app/infrastructure/di/container.py` is the composition root and holds singletons (event_bus, email_service, handlers); repositories are composed per-request in endpoint dependencies.
 
-`app/api/endpoints/contact.py:get_contact_service` resolves `EmailService` from `container.get(EmailService)` and constructs the per-request `SQLAlchemyContactRepository(session)` + `ContactService`. Add new endpoints with the same pattern.
+`app/api/endpoints/contact.py:get_contact_service` resolves `EmailService` from `container.email_service()` and constructs `FirestoreContactRepository(get_firestore_client())` + `ContactService`. Add new endpoints with the same pattern. `get_firestore_client()` returns an `AsyncClient` singleton; in dev/test it auto-detects `FIRESTORE_EMULATOR_HOST`.
 
 The `Container._setup_services` branches `MockEmailService` (dev/test or empty SMTP_USER) vs `SMTPEmailService` (production) based on `settings.environment`.
 
@@ -98,6 +98,9 @@ Standard Next.js 14 App Router layout under `frontend/src/app/`. Cross-cutting c
 
 ## Deployment
 
-- Frontend → **Vercel**. Vercel root directory is `frontend/` (not the repo root) per `VERCEL_DEPLOYMENT.md`. `vercel.json` exists at the repo root but Vercel uses the per-app config.
-- Backend → **Render**, configured by `render.yaml` (note: the `repo` field is a placeholder — update if creating a new service).
-- Production env vars are documented in `VERCEL_DEPLOYMENT.md` and `docs/api-keys-setup-guide.md`.
+- Frontend → **Vercel**. Root directory is `frontend/`. `vercel.json` at repo root is informational; Vercel uses per-app config. Env vars are managed via HCP workspace `english-cafe-prod-vercel`'s `env_vars` HCL variable (`terraform/envs/prod/vercel/`).
+- Backend → **GCP Cloud Run** (`asia-northeast1`), service `english-cafe-api`, custom domain `https://api.bz-kz.com`. Image lives in Artifact Registry `asia-northeast1-docker.pkg.dev/english-cafe-496209/english-cafe/api:<tag>`. Terraform stack: `terraform/envs/prod/cloudrun/`. **Image swaps go through `gcloud run services update`**, not terraform — the module's `lifecycle.ignore_changes` excludes `containers[0].image` so CD doesn't fight terraform.
+- Data → **Firestore Native** (`asia-northeast1`), database `(default)`, `contacts` collection. `deletion_policy = "ABANDON"` on the terraform resource so a destroy can't wipe data.
+- Auth → **GCP Workload Identity Federation** trusts HCP Terraform's OIDC issuer. Per-stack runner SA `hcp-terraform-runner@english-cafe-496209.iam.gserviceaccount.com`. No SA JSON keys.
+- Cost cap → ¥2000/month budget; Cloud Function disables billing on the project when the threshold is crossed (`terraform/envs/prod/billing/`).
+- Production bootstrap procedure (one-time): [`docs/cloud-run-bootstrap.md`](./docs/cloud-run-bootstrap.md).

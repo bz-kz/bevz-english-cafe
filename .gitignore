@@ -32,6 +32,9 @@ test-results/
 lighthouse-report.html
 frontend/coverage/
 
+# Playwright MCP scratch (snapshot YAML, console logs from MCP-driven runs)
+.playwright-mcp/
+
 # Bundle analyzer output (Stage D)
 .next/analyze/
 

@@ -4,18 +4,13 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
 import { useAuth } from '@/hooks/useAuth';
+import { getMe, type MeResponse } from '@/lib/booking';
 import { ProfileCard } from './_components/ProfileCard';
 import { ContactHistory } from './_components/ContactHistory';
 import { BookingsList } from './_components/BookingsList';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8010';
 
-interface ProfileData {
-  uid: string;
-  email: string;
-  name: string;
-  phone: string | null;
-}
 interface ContactItem {
   id: string;
   created_at: string;
@@ -27,7 +22,7 @@ interface ContactItem {
 export default function MyPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
-  const [profile, setProfile] = useState<ProfileData | null>(null);
+  const [profile, setProfile] = useState<MeResponse | null>(null);
   const [contacts, setContacts] = useState<ContactItem[]>([]);
 
   useEffect(() => {
@@ -41,13 +36,13 @@ export default function MyPage() {
     (async () => {
       const token = await user.getIdToken();
       const headers = { Authorization: `Bearer ${token}` };
-      const [profileRes, contactsRes] = await Promise.all([
-        axios.get<ProfileData>(`${API_BASE}/api/v1/users/me`, { headers }),
+      const [profileData, contactsRes] = await Promise.all([
+        getMe(),
         axios.get<ContactItem[]>(`${API_BASE}/api/v1/users/me/contacts`, {
           headers,
         }),
       ]);
-      setProfile(profileRes.data);
+      setProfile(profileData);
       setContacts(contactsRes.data);
     })();
   }, [user]);

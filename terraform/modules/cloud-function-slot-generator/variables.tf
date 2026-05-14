@@ -1,6 +1,11 @@
 variable "gcp_project_id" {
   type        = string
-  description = "Target GCP project."
+  description = "Target GCP project ID (e.g. english-cafe-496209)."
+}
+
+variable "gcp_project_number" {
+  type        = string
+  description = "Target GCP project number (e.g. 934069947997). Used to derive the compute default SA without an API call."
 }
 
 variable "region" {

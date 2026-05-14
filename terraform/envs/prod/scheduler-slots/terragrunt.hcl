@@ -11,6 +11,7 @@ locals {
 }
 
 inputs = {
-  gcp_project_id = local.env.locals.gcp_project_id
-  region         = local.env.locals.region
+  gcp_project_id     = local.env.locals.gcp_project_id
+  gcp_project_number = "934069947997"
+  region             = local.env.locals.region
 }

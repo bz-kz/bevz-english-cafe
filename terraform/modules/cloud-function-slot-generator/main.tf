@@ -34,13 +34,11 @@ resource "google_project_iam_member" "fn_firestore" {
 
 # Eventarc trigger SA = compute default; needs run.invoker + eventarc.eventReceiver.
 # Without these, Pub/Sub messages reach Eventarc but the trigger silently fails
-# to invoke the function.
-data "google_project" "current" {
-  project_id = var.gcp_project_id
-}
-
+# to invoke the function. We take the project number as an explicit input rather
+# than reading data.google_project, because the HCP runner SA's WIF auth flow
+# was failing on the projects.get API call (Terraform Cloud bootstrap quirk).
 locals {
-  compute_default_sa = "${data.google_project.current.number}-compute@developer.gserviceaccount.com"
+  compute_default_sa = "${var.gcp_project_number}-compute@developer.gserviceaccount.com"
 }
 
 resource "google_project_iam_member" "eventarc_run_invoker" {

@@ -96,6 +96,43 @@ resource "google_billing_account_iam_member" "killswitch_billing_user" {
   member             = "serviceAccount:${google_service_account.killswitch.email}"
 }
 
+# Project-level read access. Without this the SA's `get_project_billing_info`
+# call returns PERMISSION_DENIED — `roles/billing.projectManager` only grants
+# create/delete billing assignment, not project resourcemanager.projects.get.
+# `roles/browser` is the minimal role that provides it.
+resource "google_project_iam_member" "killswitch_project_browser" {
+  project = var.gcp_project_id
+  role    = "roles/browser"
+  member  = "serviceAccount:${google_service_account.killswitch.email}"
+}
+
+# --- Eventarc trigger SA permissions ---
+# Cloud Functions 2nd gen uses the compute default SA as the Eventarc trigger
+# SA (when event_trigger.service_account_email is unset). That SA needs
+# permission to invoke the underlying Cloud Run service AND to receive
+# Eventarc events. Without these, Pub/Sub messages reach Eventarc but the
+# trigger silently fails to invoke the function ("The IAM principal lacks
+# {run.routes.invoke} permission" in the function's audit logs).
+data "google_project" "current" {
+  project_id = var.gcp_project_id
+}
+
+locals {
+  compute_default_sa = "${data.google_project.current.number}-compute@developer.gserviceaccount.com"
+}
+
+resource "google_project_iam_member" "eventarc_run_invoker" {
+  project = var.gcp_project_id
+  role    = "roles/run.invoker"
+  member  = "serviceAccount:${local.compute_default_sa}"
+}
+
+resource "google_project_iam_member" "eventarc_event_receiver" {
+  project = var.gcp_project_id
+  role    = "roles/eventarc.eventReceiver"
+  member  = "serviceAccount:${local.compute_default_sa}"
+}
+
 # --- Function source bundle ---
 # Zip the source directory at module path. Stored on GCS, referenced by the function.
 data "archive_file" "source" {
@@ -156,6 +193,9 @@ resource "google_cloudfunctions2_function" "killswitch" {
   depends_on = [
     google_project_service.required,
     google_project_iam_member.killswitch_project_billing_manager,
+    google_project_iam_member.killswitch_project_browser,
     google_billing_account_iam_member.killswitch_billing_user,
+    google_project_iam_member.eventarc_run_invoker,
+    google_project_iam_member.eventarc_event_receiver,
   ]
 }

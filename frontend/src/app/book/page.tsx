@@ -14,6 +14,14 @@ import { useNotificationStore } from '@/stores/notificationStore';
 import { BookingGrid } from './_components/BookingGrid';
 import { BookingConfirmDialog } from './_components/BookingConfirmDialog';
 
+const ERROR_MESSAGES: Record<string, string> = {
+  trial_already_used: '無料体験は既に使用済みです。',
+  no_active_quota:
+    '今月のコマが付与されていません。プラン契約状況をご確認ください。',
+  quota_exhausted: '今月のコマを使い切りました。来月までお待ちください。',
+  cancel_deadline_passed: '24時間以内の予約はキャンセルできません。',
+};
+
 const DAYS = 14;
 
 function jstMidnightToday(): Date {
@@ -69,9 +77,11 @@ export default function BookPage() {
       setPending(null);
       await refresh();
     } catch (e: unknown) {
-      const detail = (e as { response?: { data?: { detail?: string } } })
-        .response?.data?.detail;
-      notify.error(detail ?? '予約に失敗しました');
+      const detail =
+        (e as { response?: { data?: { detail?: string } } }).response?.data
+          ?.detail ?? '';
+      const friendly = ERROR_MESSAGES[detail] ?? '予約に失敗しました';
+      notify.error(friendly);
       setPending(null);
     }
   };

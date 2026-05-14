@@ -144,3 +144,32 @@ export async function adminDeleteSlot(
     { headers: await authHeaders() }
   );
 }
+
+// --- User / quota ---
+
+export type Plan = 'light' | 'standard' | 'intensive';
+
+export interface MonthQuotaSummary {
+  granted: number;
+  used: number;
+  remaining: number;
+}
+
+export interface MeResponse {
+  uid: string;
+  email: string;
+  name: string;
+  phone: string | null;
+  plan: Plan | null;
+  trial_used: boolean;
+  current_month_quota: MonthQuotaSummary | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function getMe(): Promise<MeResponse> {
+  const resp = await axios.get<MeResponse>(`${API_BASE}/api/v1/users/me`, {
+    headers: await authHeaders(),
+  });
+  return resp.data;
+}

@@ -93,4 +93,15 @@ describe('SlotCell', () => {
     fireEvent.click(screen.getByText('-'));
     expect(onClick).not.toHaveBeenCalled();
   });
+
+  it('renders ▲ for within24h state and is clickable', () => {
+    const onClick = jest.fn();
+    const s = slot();
+    render(
+      <SlotCell state={{ kind: 'within24h', slot: s }} onClick={onClick} />
+    );
+    expect(screen.getByText('▲')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button'));
+    expect(onClick).toHaveBeenCalledWith(s);
+  });
 });

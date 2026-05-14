@@ -33,3 +33,19 @@ class BookingNotFoundError(BookingError):
 
 class NotBookingOwnerError(BookingError):
     """The acting user is not the booking owner."""
+
+
+class TrialAlreadyUsedError(Exception):
+    """User has already consumed their lifetime trial booking."""
+
+
+class NoActiveQuotaError(Exception):
+    """User has no monthly_quota row for the booking month (plan unset or grant pending)."""
+
+
+class QuotaExhaustedError(Exception):
+    """User's monthly quota is fully consumed."""
+
+
+class CancelDeadlinePassedError(Exception):
+    """Booking is within 24 hours of start — cancellation refused."""

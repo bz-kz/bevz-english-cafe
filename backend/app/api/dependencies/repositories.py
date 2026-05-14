@@ -5,6 +5,7 @@ from __future__ import annotations
 from app.domain.repositories.booking_repository import BookingRepository
 from app.domain.repositories.contact_repository import ContactRepository
 from app.domain.repositories.lesson_slot_repository import LessonSlotRepository
+from app.domain.repositories.monthly_quota_repository import MonthlyQuotaRepository
 from app.domain.repositories.user_repository import UserRepository
 from app.infrastructure.database.firestore_client import get_firestore_client
 from app.infrastructure.repositories.firestore_booking_repository import (
@@ -15,6 +16,9 @@ from app.infrastructure.repositories.firestore_contact_repository import (
 )
 from app.infrastructure.repositories.firestore_lesson_slot_repository import (
     FirestoreLessonSlotRepository,
+)
+from app.infrastructure.repositories.firestore_monthly_quota_repository import (
+    FirestoreMonthlyQuotaRepository,
 )
 from app.infrastructure.repositories.firestore_user_repository import (
     FirestoreUserRepository,
@@ -38,10 +42,16 @@ def get_booking_repository() -> BookingRepository:
     return FirestoreBookingRepository(get_firestore_client())
 
 
+def get_monthly_quota_repository() -> MonthlyQuotaRepository:
+    return FirestoreMonthlyQuotaRepository(get_firestore_client())
+
+
 def get_booking_service() -> BookingService:
     client = get_firestore_client()
     return BookingService(
         FirestoreLessonSlotRepository(client),
         FirestoreBookingRepository(client),
         client,
+        FirestoreMonthlyQuotaRepository(client),
+        FirestoreUserRepository(client),
     )

@@ -51,3 +51,29 @@ class TestUserUpdate:
         original_updated = user.updated_at
         user.update()
         assert user.updated_at == original_updated
+
+
+def test_user_default_plan_is_none():
+    u = User(uid="u1", email="a@b.c", name="x")
+    assert u.plan is None
+    assert u.plan_started_at is None
+    assert u.trial_used is False
+
+
+def test_user_can_be_assigned_a_plan():
+    from app.domain.enums.plan import Plan
+
+    u = User(uid="u1", email="a@b.c", name="x")
+    u.set_plan(Plan.STANDARD)
+    assert u.plan == Plan.STANDARD
+    assert u.plan_started_at is not None
+
+
+def test_user_set_plan_to_none_clears_started_at():
+    from app.domain.enums.plan import Plan
+
+    u = User(uid="u1", email="a@b.c", name="x")
+    u.set_plan(Plan.LIGHT)
+    u.set_plan(None)
+    assert u.plan is None
+    assert u.plan_started_at is None

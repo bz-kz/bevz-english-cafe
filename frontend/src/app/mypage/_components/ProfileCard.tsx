@@ -1,15 +1,15 @@
 'use client';
 
 import Link from 'next/link';
+import type { MeResponse, Plan } from '@/lib/booking';
 
-interface Profile {
-  uid: string;
-  email: string;
-  name: string;
-  phone: string | null;
-}
+const PLAN_LABEL: Record<Plan, string> = {
+  light: 'ライトプラン',
+  standard: 'スタンダードプラン',
+  intensive: '集中プラン',
+};
 
-export function ProfileCard({ profile }: { profile: Profile }) {
+export function ProfileCard({ profile }: { profile: MeResponse }) {
   return (
     <section className="rounded border bg-white p-6 shadow-sm">
       <div className="flex items-center justify-between">
@@ -36,6 +36,36 @@ export function ProfileCard({ profile }: { profile: Profile }) {
             {profile.phone ?? <span className="text-gray-400">未設定</span>}
           </dd>
         </div>
+        <div className="flex">
+          <dt className="w-32 text-gray-500">プラン</dt>
+          <dd>
+            {profile.plan ? (
+              <strong>{PLAN_LABEL[profile.plan]}</strong>
+            ) : (
+              <span className="text-gray-400">未契約</span>
+            )}
+          </dd>
+        </div>
+        {profile.current_month_quota && (
+          <div className="flex">
+            <dt className="w-32 text-gray-500">今月のコマ</dt>
+            <dd>
+              {profile.current_month_quota.used} /{' '}
+              {profile.current_month_quota.granted} 使用 (残{' '}
+              {profile.current_month_quota.remaining})
+            </dd>
+          </div>
+        )}
+        {!profile.trial_used && (
+          <div className="flex">
+            <dt className="w-32 text-gray-500" />
+            <dd>
+              <span className="rounded bg-green-50 px-2 py-1 text-xs text-green-700">
+                無料体験予約あり
+              </span>
+            </dd>
+          </div>
+        )}
       </dl>
     </section>
   );

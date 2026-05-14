@@ -34,6 +34,12 @@ from app.infrastructure.repositories.firestore_booking_repository import (  # no
 from app.infrastructure.repositories.firestore_lesson_slot_repository import (  # noqa: E402
     FirestoreLessonSlotRepository,
 )
+from app.infrastructure.repositories.firestore_monthly_quota_repository import (  # noqa: E402
+    FirestoreMonthlyQuotaRepository,
+)
+from app.infrastructure.repositories.firestore_user_repository import (  # noqa: E402
+    FirestoreUserRepository,
+)
 from app.services.booking_service import BookingService  # noqa: E402
 
 
@@ -60,6 +66,8 @@ async def slot_factory(
     client = fs.AsyncClient(project="test-project")
     slot_repo = FirestoreLessonSlotRepository(client)
     booking_repo = FirestoreBookingRepository(client)
+    quota_repo = FirestoreMonthlyQuotaRepository(client)
+    user_repo = FirestoreUserRepository(client)
     for col in ("lesson_slots", "bookings"):
         async for doc in client.collection(col).stream():
             await doc.reference.delete()
@@ -68,7 +76,7 @@ async def slot_factory(
         return slot_repo
 
     def _override_booking_service() -> BookingService:
-        return BookingService(slot_repo, booking_repo, client)
+        return BookingService(slot_repo, booking_repo, client, quota_repo, user_repo)
 
     app.dependency_overrides[get_lesson_slot_repository] = _override_slot_repo
     app.dependency_overrides[get_booking_service] = _override_booking_service

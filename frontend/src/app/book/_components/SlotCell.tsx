@@ -4,6 +4,7 @@ import type { Booking, LessonSlot } from '@/lib/booking';
 
 export type CellState =
   | { kind: 'open'; slot: LessonSlot }
+  | { kind: 'within24h'; slot: LessonSlot }
   | { kind: 'closed'; slot: LessonSlot }
   | { kind: 'full'; slot: LessonSlot }
   | { kind: 'mine'; booking: Booking }
@@ -24,6 +25,18 @@ export function SlotCell({
         className="flex h-8 w-full items-center justify-center bg-green-100 text-sm hover:bg-green-200"
       >
         ○
+      </button>
+    );
+  }
+  if (state.kind === 'within24h') {
+    return (
+      <button
+        type="button"
+        onClick={() => onClick(state.slot)}
+        title="24時間以内はキャンセル不可"
+        className="flex h-8 w-full items-center justify-center bg-yellow-100 text-sm hover:bg-yellow-200"
+      >
+        ▲
       </button>
     );
   }

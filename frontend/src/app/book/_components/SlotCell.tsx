@@ -28,21 +28,18 @@ export function SlotCell({
       </button>
     );
   }
-  if (state.kind === 'within24h') {
+  if (
+    state.kind === 'within24h' ||
+    state.kind === 'closed' ||
+    state.kind === 'full'
+  ) {
+    const title =
+      state.kind === 'within24h' ? '24時間以内のため予約不可' : undefined;
     return (
-      <button
-        type="button"
-        onClick={() => onClick(state.slot)}
-        title="24時間以内はキャンセル不可"
-        className="flex h-8 w-full items-center justify-center bg-yellow-100 text-sm hover:bg-yellow-200"
+      <span
+        title={title}
+        className="flex h-8 w-full items-center justify-center bg-gray-200 text-sm text-gray-400"
       >
-        ▲
-      </button>
-    );
-  }
-  if (state.kind === 'closed' || state.kind === 'full') {
-    return (
-      <span className="flex h-8 w-full items-center justify-center bg-gray-200 text-sm text-gray-400">
         ×
       </span>
     );

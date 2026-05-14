@@ -1,12 +1,35 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuthStore } from '@/stores/authStore';
 
 const Header = () => {
   const { user, isAdmin, signOut } = useAuthStore();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isUserMenuOpen) return;
+    const onDocMouseDown = (e: MouseEvent) => {
+      if (
+        userMenuRef.current &&
+        !userMenuRef.current.contains(e.target as Node)
+      ) {
+        setIsUserMenuOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsUserMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onDocMouseDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDocMouseDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [isUserMenuOpen]);
 
   const navigation = [
     { name: 'ホーム', href: '/' },
@@ -17,11 +40,12 @@ const Header = () => {
     { name: 'お問い合わせ', href: '/contact' },
   ];
 
+  const closeUserMenu = () => setIsUserMenuOpen(false);
+
   return (
     <header className="bg-white shadow-sm">
       <nav className="container-custom">
         <div className="flex h-16 items-center justify-between">
-          {/* ロゴ */}
           <div className="flex-shrink-0">
             <Link href="/" className="flex items-center">
               <span className="text-2xl font-bold text-primary-600">
@@ -30,7 +54,6 @@ const Header = () => {
             </Link>
           </div>
 
-          {/* デスクトップナビゲーション */}
           <div className="hidden md:block">
             <div className="ml-10 flex items-baseline space-x-4">
               {navigation.map(item => (
@@ -45,40 +68,55 @@ const Header = () => {
             </div>
           </div>
 
-          {/* CTA / ユーザーメニュー */}
           <div className="hidden md:flex md:items-center md:gap-3">
             <Link href="/contact" className="btn-primary">
               無料体験予約
             </Link>
             {user ? (
-              <details className="relative">
-                <summary className="cursor-pointer list-none rounded px-3 py-2 text-sm hover:bg-gray-100">
+              <div className="relative" ref={userMenuRef}>
+                <button
+                  type="button"
+                  onClick={() => setIsUserMenuOpen(v => !v)}
+                  aria-haspopup="menu"
+                  aria-expanded={isUserMenuOpen}
+                  className="rounded px-3 py-2 text-sm hover:bg-gray-100"
+                >
                   {user.displayName ?? user.email ?? 'ユーザー'}
-                </summary>
-                <div className="absolute right-0 z-10 mt-1 w-40 rounded border bg-white shadow">
-                  <Link
-                    href="/mypage"
-                    className="block px-3 py-2 text-sm hover:bg-gray-50"
+                </button>
+                {isUserMenuOpen && (
+                  <div
+                    role="menu"
+                    className="absolute right-0 z-10 mt-1 w-40 rounded border bg-white shadow"
                   >
-                    マイページ
-                  </Link>
-                  {isAdmin && (
                     <Link
-                      href="/admin/lessons"
+                      href="/mypage"
+                      onClick={closeUserMenu}
                       className="block px-3 py-2 text-sm hover:bg-gray-50"
                     >
-                      Admin
+                      マイページ
                     </Link>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => signOut()}
-                    className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50"
-                  >
-                    ログアウト
-                  </button>
-                </div>
-              </details>
+                    {isAdmin && (
+                      <Link
+                        href="/admin/lessons"
+                        onClick={closeUserMenu}
+                        className="block px-3 py-2 text-sm hover:bg-gray-50"
+                      >
+                        Admin
+                      </Link>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        closeUserMenu();
+                        signOut();
+                      }}
+                      className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50"
+                    >
+                      ログアウト
+                    </button>
+                  </div>
+                )}
+              </div>
             ) : (
               <Link
                 href="/login"
@@ -89,7 +127,6 @@ const Header = () => {
             )}
           </div>
 
-          {/* モバイルメニューボタン */}
           <div className="md:hidden">
             <button
               onClick={() => setIsMenuOpen(!isMenuOpen)}
@@ -134,7 +171,6 @@ const Header = () => {
           </div>
         </div>
 
-        {/* モバイルメニュー */}
         {isMenuOpen && (
           <div className="md:hidden">
             <div className="space-y-1 px-2 pb-3 pt-2 sm:px-3">

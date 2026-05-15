@@ -67,4 +67,53 @@ describe('AdminUserPicker', () => {
       name: '山田太郎',
     });
   });
+
+  it('ArrowDown highlights candidates in order', async () => {
+    const onSelect = jest.fn();
+    render(<AdminUserPicker onSelect={onSelect} />);
+    const input = screen.getByPlaceholderText(/メール.*名前.*検索/);
+    fireEvent.change(input, { target: { value: 'a' } });
+    await act(async () => {
+      jest.advanceTimersByTime(300);
+    });
+    await screen.findByText(/taro@example.com/);
+
+    const firstBtn = screen
+      .getByText(/taro@example.com/)
+      .closest('button') as HTMLElement;
+    const secondBtn = screen
+      .getByText(/hanako@example.com/)
+      .closest('button') as HTMLElement;
+
+    expect(firstBtn).toHaveAttribute('aria-selected', 'false');
+
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    expect(firstBtn).toHaveAttribute('aria-selected', 'true');
+    expect(firstBtn.className).toMatch(/bg-blue-100/);
+
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    expect(secondBtn).toHaveAttribute('aria-selected', 'true');
+    expect(firstBtn).toHaveAttribute('aria-selected', 'false');
+  });
+
+  it('Enter on highlighted candidate calls onSelect with that candidate', async () => {
+    const onSelect = jest.fn();
+    render(<AdminUserPicker onSelect={onSelect} />);
+    const input = screen.getByPlaceholderText(/メール.*名前.*検索/);
+    fireEvent.change(input, { target: { value: 'a' } });
+    await act(async () => {
+      jest.advanceTimersByTime(300);
+    });
+    await screen.findByText(/taro@example.com/);
+
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(onSelect).toHaveBeenCalledWith({
+      uid: 'u2',
+      email: 'hanako@example.com',
+      name: '佐藤花子',
+    });
+  });
 });

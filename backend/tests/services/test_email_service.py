@@ -185,3 +185,14 @@ class TestSMTPEmailService:
         assert "グループレッスンに興味があります。" in body
         assert "英会話カフェ" in body
         assert "2営業日以内" in body
+
+
+async def test_mock_send_payment_failed_records_call():
+    from app.services.email_service import MockEmailService
+
+    svc = MockEmailService()
+    ok = await svc.send_payment_failed("u@example.com", "山田太郎")
+    assert ok is True
+    assert any(
+        "u@example.com" in str(c) for c in svc.sent_emails
+    )  # MockEmailService records into sent_emails

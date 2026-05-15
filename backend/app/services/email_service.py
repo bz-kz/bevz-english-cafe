@@ -21,6 +21,10 @@ class EmailService(Protocol):
         """問い合わせ確認メールを送信"""
         ...
 
+    async def send_payment_failed(self, to_email: str, name: str) -> bool:
+        """サブスク支払い失敗の通知メールを送信"""
+        ...
+
 
 class SMTPEmailService:
     """SMTP経由でメールを送信するサービス"""
@@ -66,6 +70,17 @@ class SMTPEmailService:
         except Exception as e:
             logger.error(f"Failed to send confirmation email: {e}")
             return False
+
+    async def send_payment_failed(self, to_email: str, name: str) -> bool:
+        subject = "【英会話カフェ】お支払いが確認できませんでした"
+        body = (
+            f"{name} 様\n\n"
+            "サブスクリプションのお支払いが確認できませんでした。\n"
+            "カード情報をご確認のうえ、マイページの「プラン管理」から\n"
+            "お支払い方法を更新してください。数日内に自動で再請求されます。\n\n"
+            "英会話カフェ"
+        )
+        return await self._send_email(to_email, subject, body)
 
     async def _send_email(self, to_email: str, subject: str, body: str) -> bool:
         """メール送信の共通処理"""
@@ -179,4 +194,11 @@ class MockEmailService:
             }
         )
         logger.info(f"Mock confirmation email sent for contact {contact.id}")
+        return True
+
+    async def send_payment_failed(self, to_email: str, name: str) -> bool:
+        self.sent_emails.append(
+            {"to": to_email, "type": "payment_failed", "name": name}
+        )
+        logger.info("MockEmail payment_failed -> %s", to_email)
         return True

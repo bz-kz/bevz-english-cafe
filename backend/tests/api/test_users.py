@@ -105,3 +105,18 @@ async def test_me_quota_summary_null_when_no_quota(
     assert resp.status_code == 200
     body = resp.json()
     assert body["quota_summary"] is None
+
+
+async def test_me_includes_subscription_fields(client, authed_user, firestore_client):
+    # authed_user is the exact object get_current_user returns; mutate its
+    # subscription state and assert /me surfaces the new fields.
+    authed_user.update_subscription(
+        customer_id="cus_me", subscription_id="sub_me", status="active"
+    )
+    resp = await client.get("/api/v1/users/me")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["subscription_status"] == "active"
+    assert body["stripe_subscription_id"] == "sub_me"
+    assert body["subscription_cancel_at_period_end"] is False
+    assert "current_period_end" in body

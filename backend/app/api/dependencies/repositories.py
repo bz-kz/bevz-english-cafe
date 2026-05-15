@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from app.config import get_settings
 from app.domain.repositories.booking_repository import BookingRepository
 from app.domain.repositories.contact_repository import ContactRepository
 from app.domain.repositories.lesson_slot_repository import LessonSlotRepository
 from app.domain.repositories.monthly_quota_repository import MonthlyQuotaRepository
 from app.domain.repositories.user_repository import UserRepository
 from app.infrastructure.database.firestore_client import get_firestore_client
+from app.infrastructure.di.container import get_container
 from app.infrastructure.repositories.firestore_booking_repository import (
     FirestoreBookingRepository,
 )
@@ -20,10 +22,14 @@ from app.infrastructure.repositories.firestore_lesson_slot_repository import (
 from app.infrastructure.repositories.firestore_monthly_quota_repository import (
     FirestoreMonthlyQuotaRepository,
 )
+from app.infrastructure.repositories.firestore_processed_event_repository import (
+    FirestoreProcessedEventRepository,
+)
 from app.infrastructure.repositories.firestore_user_repository import (
     FirestoreUserRepository,
 )
 from app.services.booking_service import BookingService
+from app.services.stripe_service import StripeService
 
 
 def get_user_repository() -> UserRepository:
@@ -54,4 +60,16 @@ def get_booking_service() -> BookingService:
         client,
         FirestoreMonthlyQuotaRepository(client),
         FirestoreUserRepository(client),
+    )
+
+
+def get_stripe_service() -> StripeService:
+    client = get_firestore_client()
+    return StripeService(
+        user_repo=FirestoreUserRepository(client),
+        quota_repo=FirestoreMonthlyQuotaRepository(client),
+        email_service=get_container().email_service(),
+        processed_repo=FirestoreProcessedEventRepository(client),
+        fs_client=client,
+        settings=get_settings(),
     )

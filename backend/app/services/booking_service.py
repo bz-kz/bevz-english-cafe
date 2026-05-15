@@ -109,24 +109,34 @@ class BookingService:
                 raise NoActiveQuotaError(f"User {user.uid} not initialized")
             user_data = cast(dict[str, Any], user_snap.to_dict())
 
+            consumed_doc_id: str | None = None
             if slot.lesson_type == LessonType.TRIAL:
                 if user_data.get("trial_used", False):
                     raise TrialAlreadyUsedError(user.uid)
                 tx.update(user_ref, {"trial_used": True, "updated_at": _utc_now()})
             else:
-                year_month = _jst_year_month(_utc_now())
-                quota_ref = self._fs.collection("monthly_quota").document(
-                    f"{user.uid}_{year_month}"
+                quota_docs: list[tuple[Any, dict[str, Any]]] = []
+                q = self._fs.collection("monthly_quota").where(
+                    "user_id", "==", user.uid
                 )
-                quota_snap = await quota_ref.get(transaction=tx)
-                if not quota_snap.exists:
-                    raise NoActiveQuotaError(year_month)
-                quota_data = cast(dict[str, Any], quota_snap.to_dict())
-                granted = int(quota_data["granted"])
-                used = int(quota_data["used"])
-                if used >= granted:
-                    raise QuotaExhaustedError(year_month)
-                tx.update(quota_ref, {"used": used + 1})
+                async for qd in q.stream(transaction=tx):
+                    quota_docs.append(
+                        (qd.reference, cast(dict[str, Any], qd.to_dict()))
+                    )
+                now = _utc_now()
+                active = [
+                    (ref, d)
+                    for ref, d in quota_docs
+                    if d["expires_at"] > now and int(d["used"]) < int(d["granted"])
+                ]
+                if not quota_docs:
+                    raise NoActiveQuotaError(user.uid)
+                if not active:
+                    raise QuotaExhaustedError(user.uid)
+                active.sort(key=lambda rd: rd[1]["granted_at"])
+                chosen_ref, chosen = active[0]
+                consumed_doc_id = chosen_ref.id
+                tx.update(chosen_ref, {"used": int(chosen["used"]) + 1})
 
             booking = Booking(
                 id=new_booking_id,
@@ -135,6 +145,9 @@ class BookingService:
                 status=BookingStatus.CONFIRMED,
                 created_at=_utc_now(),
                 cancelled_at=None,
+                consumed_quota_doc_id=(
+                    None if slot.lesson_type == LessonType.TRIAL else consumed_doc_id
+                ),
             )
             tx.update(
                 slot_ref,

@@ -20,6 +20,7 @@
 | Q-CI2b Build | GitHub Actions runner で `docker build` → Artifact Registry push (`backend/Dockerfile.prod` 流用、Cloud Build 不使用) |
 | Deploy | `gcloud run services update --image`(`gcloud run deploy` でなく)。terraform `ignore_changes` と整合 |
 | Branch 限定 | repo 単位 `attribute_condition` + workflow `branches:[main]` + GitHub `production` Environment protection。principalSet の ref 厳格化は任意の追加ハードニングとして記載 |
+| **(C2) Prerequisite** | **PR #18 (`fix/phone-roundtrip-test`) が `main` にマージ済であること**。未マージだと `pytest -q` が `TestPhoneRoundTrip::test_phone_is_persisted` で恒久 red になり全 deploy が block する。本 CI/CD の PR は #18 マージ後に main へ取り込む(実装計画の冒頭ゲートに明記) |
 
 ## Architecture
 
@@ -62,11 +63,13 @@ resource "google_service_account_iam_member" "github_wif" {
 }
 ```
 
-新規 `variables.tf`:
-- `github_provider_id` (string, e.g. `github-actions`)
-- `github_repository` (string, e.g. `bz-kz/bevz-english-cafe`)
-- `deployer_service_account_id` (string, e.g. `github-actions-deployer`)
-- `deployer_iam_roles` (list, default `["roles/run.admin","roles/artifactregistry.writer","roles/iam.serviceAccountUser"]`)
+新規 `variables.tf` ((I3) module を plan-clean に保つため `github_repository` 以外は default を付与):
+- `github_provider_id` (string, **default `"github-actions"`**)
+- `github_repository` (string, **default なし — terragrunt inputs で必須明示**, e.g. `bz-kz/bevz-english-cafe`)
+- `deployer_service_account_id` (string, **default `"github-actions-deployer"`**)
+- `deployer_iam_roles` (list(string), **default `["roles/run.admin","roles/artifactregistry.writer","roles/iam.serviceAccountUser"]`**)
+
+`terraform/envs/prod/wif/terragrunt.hcl` は現在 `gcp_project_id` / `hcp_organization` のみ inputs に渡す。`github_repository` を inputs に追加(他 3 var は module default で可、上書き不要)。他 stack はこの module を使わないため影響なし。
 
 新規 `outputs.tf`:
 - `github_wif_provider_name` = `google_iam_workload_identity_pool_provider.github.name` (workflow の `workload_identity_provider`)
@@ -82,9 +85,10 @@ resource "google_service_account_iam_member" "github_wif" {
 
 2 job 構成。`permissions: id-token: write`(WIF OIDC 必須) / `contents: read`。`concurrency: backend-deploy-prod` `cancel-in-progress:false`(deploy 途中キャンセル禁止)。
 
-- **job `test`**: `actions/checkout@v4` → Firestore emulator を `docker run`(`gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators`, `gcloud emulators firestore start --host-port=0.0.0.0:8080`)で起動し readiness 待ち → `astral-sh/setup-uv@v5` → `cd backend && uv sync --frozen` → `uv run ruff check .` / `uv run mypy app/domain app/services app/api` / `FIRESTORE_EMULATOR_HOST=localhost:8080 uv run pytest -q`。
-  - emulator を `services:` でなく step の `docker run` にする理由: GitHub Actions `services:` はコンテナの起動コマンドを上書きできず、このイメージは引数で emulator サブコマンドを渡す必要があるため。
-  - `FIRESTORE_EMULATOR_HOST` を設定することで emulator-gated テスト(現 203 件)も CI で実行される。
+- **job `test`**: `actions/checkout@v4` → Firestore emulator を `docker run --rm -d`(`gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators`, `gcloud emulators firestore start --host-port=0.0.0.0:8080 --project=english-cafe-dev`)で起動し readiness 待ち → `astral-sh/setup-uv@v5` → `cd backend && uv sync --frozen` → `uv run ruff check .` / **`uv run mypy app/domain app/services`** / `FIRESTORE_EMULATOR_HOST=localhost:8080 uv run pytest -q`。
+  - **(C1) mypy scope は `app/domain app/services` に限定**: CLAUDE.md の enforced strict scope はこの 2 パッケージ。`app/api` は現在 6 件の pre-existing mypy エラー (firebase_admin import-untyped / unused type:ignore in contact.py/auth.py/lesson_slots.py/bookings.py) があり、CI に含めると全 deploy が恒久 block する。`app/api` を gate に含めるのは別タスクで 6 件修正後の将来タイトニングとし、本 CI では非対象。
+  - emulator を `services:` でなく step の `docker run` にする理由: GitHub Actions `services:` はコンテナの起動コマンドを上書きできず、このイメージは引数で emulator サブコマンドを渡す必要があるため。`--rm` で job 終了時に自動破棄(runner ブロックなし)。`--project=english-cafe-dev` は repo の `docker-compose.yml` の実証済み invocation と一致させる。
+  - `FIRESTORE_EMULATOR_HOST` を設定することで emulator-gated テストも CI で実行される(PR #18 マージ後は 203 件 green。下記 C2 prerequisite 参照)。
 - **job `deploy`** (`needs: test`, `environment: production`): `google-github-actions/auth@v2`(`workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}`, `service_account: ${{ vars.GCP_DEPLOYER_SA }}`)→ `setup-gcloud@v2` → `gcloud auth configure-docker asia-northeast1-docker.pkg.dev` → `docker build -f backend/Dockerfile.prod -t <AR>/api:${GITHUB_SHA} backend` → `docker push` → `gcloud run services update english-cafe-api --image <img> --region asia-northeast1 --quiet` → health check ループ(`curl -fsS https://api.bz-kz.com/health`, 最大 ~100s)。
 
 image tag = `${GITHUB_SHA}`(不変・トレース可能)。`vars.*`(GitHub Actions Variables)を使用 — WIF provider 名と deployer SA email は機微でない(鍵レス)。
@@ -135,6 +139,7 @@ image tag = `${GITHUB_SHA}`(不変・トレース可能)。`vars.*`(GitHub Actio
 
 ## Ops checklist (コード外・ユーザー操作、私側不可)
 
+0. **(C2) 前提**: PR #18 (`fix/phone-roundtrip-test`) を `main` にマージ。未マージだと CI の `pytest -q` が恒久 red。本 CI/CD PR も #18 マージ後に main 取り込み
 1. `terraform/envs/prod/wif` を `terragrunt apply`(`english-cafe-prod-wif` workspace)— GitHub provider + deployer SA + IAM binding 作成
 2. GitHub repo Settings → Secrets and variables → Actions → **Variables**: `GCP_WIF_PROVIDER`(`github_wif_provider_name` output のフル resource 名)、`GCP_DEPLOYER_SA`(`deployer_service_account_email` output)
 3. GitHub repo Settings → Environments → `production` 作成(任意: required reviewers / deployment branch を `main` に限定)

@@ -53,7 +53,9 @@ def get_stripe_service() -> StripeService:
         settings=get_settings(),
     )
 ```
-`get_booking_service` と同流儀の per-request 構築。`email_service` のみ Container singleton 由来 (`MockEmailService`/`SMTPEmailService` の環境分岐は Container が既に担う)。`get_settings()` は既存の lru_cache 済 settings provider。
+`get_booking_service` と同流儀の per-request 構築。`email_service` のみ Container singleton 由来 (`MockEmailService`/`SMTPEmailService` の環境分岐は Container が既に担う)。
+
+**(NEW-3) `repositories.py` への import 追加が必要** (現状この module は両方とも未 import): `from app.config import get_settings` (`app/config.py:54` の lru_cache 済 provider)、`from app.infrastructure.di.container import get_container` (`app/infrastructure/di/container.py:137`)。`get_booking_service` は settings を注入しないが、`get_stripe_service` は settings/container を要するため import 追加は spec 内既定事項。
 
 ## Data model
 
@@ -77,7 +79,8 @@ current_period_end: datetime | None = None
 - collection `processed_stripe_events`、doc id = Stripe `event.id`
 - body: `{ "event_type": str, "processed_at": datetime }`
 - `ProcessedEventRepository` interface (2 つの使い方を提供):
-  - `claim(event_id: str, event_type: str) -> bool` — `document(event_id).create({...})` を試み `google.api_core.exceptions.AlreadyExists` を捕捉。create 成功=True (初回)、衝突=False (重複)。**非クリティカル event の claim-first 用**
+  - `claim(event_id: str, event_type: str) -> bool` — `await document(event_id).create({...})` を試み `google.api_core.exceptions.AlreadyExists` を捕捉。create 成功=True (初回)、衝突=False (重複)。**非クリティカル event の claim-first 用**
+  - **(NEW-4) codebase 初出の依存面**: `AsyncDocumentReference.create()` + `google.api_core.exceptions.AlreadyExists` は本リポジトリ内に既存先例が無い (既存 repo は全て `.set()`)。`google-cloud-firestore>=2.16` の async client では正規に存在するが、**emulator が create-if-absent precondition を honor することを `test_firestore_processed_event_repository.py` で必ず実証する** (初回 True / 2 回目 `AlreadyExists`→False を emulator 実行で確認)。`google.api_core.exceptions` の import 追加が必要
   - `transactional` 用途では StripeService が `fs_client` で直接 `tx.get`/`tx.set` する (クリティカル `invoice.paid` のみ。下記 handle_webhook 参照)。repo は単一 doc ヘルパーとして `doc_ref(event_id)` も公開
 - impl: `FirestoreProcessedEventRepository`
 
@@ -100,18 +103,22 @@ class StripeService:
 
 ### Stripe lib / API version pin (I-1, I-2)
 - `pyproject.toml`: `stripe = "~=9.0"` (major pin; 実装者は pin 版で例外パスを確認)。例外は **`stripe.SignatureVerificationError`** を使う (modern path; `stripe.error.SignatureVerificationError` は別名で残るが正準は前者)
-- StripeService 初期化時に `stripe.api_version = "2024-06-20"` を明示セット (この版で `invoice.subscription` が string id として存在することを前提とする)。`AlreadyExists` は `google.api_core.exceptions.AlreadyExists`
+- StripeService 初期化時に `stripe.api_version = "2024-06-20"` を明示セット (この版で `invoice.subscription` が string id として存在する前提)。これは module-global `stripe` への冪等な定数代入 (常に同値) なので並行リクエストでも安全。`AlreadyExists` は `google.api_core.exceptions.AlreadyExists`
 - subscription id 取得は防御的に: `sub_id = invoice.get("subscription") or invoice.get("parent", {}).get("subscription_details", {}).get("subscription")`。取れなければ error log + 200 return
 
 ### handle_webhook
 1. `event = await asyncio.to_thread(stripe.Webhook.construct_event, raw_payload, sig_header, settings.stripe_webhook_secret)` — 失敗時 `stripe.SignatureVerificationError` を raise（endpoint が 400 に変換）。※ `construct_event` は純 HMAC で速いので `to_thread` は必須ではないが、SDK 呼び出しを一貫して off-loop に保つため統一 (例外は `to_thread` がそのまま再 raise、伝播不変)
 2. **冪等戦略**:
-   - **クリティカル `invoice.paid` (quota grant)**: 単一 `@fs.async_transactional` で
-     1. `pe_ref = fs.collection("processed_stripe_events").document(event.id)` を `await pe_ref.get(transaction=tx)`
-     2. 既存 → `return` (skip。exactly-once)
-     3. 未存在 → uid/plan を解決し quota doc を `tx.set(monthly_quota.document(quota_doc_id), quota_dict)` + `tx.set(pe_ref, {...})` を**同一 txn でコミット**
-     - 並行二重配信時、Firestore async txn は read-set (`pe_ref`) 競合を検知し片方を retry。retry 側は `pe_ref` 既存を見て skip → **並行でも exactly-once** (C1 解消、親 spec の I4 契約を満たす)。`booking_service` の既存パターンと同型 (全 read を全 write の前)
-   - **非クリティカル** (`checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_failed`): `if not await processed_repo.claim(event.id, event.type): return` (claim-first; `create()` の atomic fail-if-exists)。その後の副作用は user doc の冪等な上書きのみ
+   - **クリティカル `invoice.paid` (quota grant)** — **2 段構成。ネットワーク I/O は transaction の外**:
+     1. **(txn 前)** `_resolve_uid_from_invoice(invoice)` で `stripe.Subscription.retrieve` (`to_thread`) → uid/plan を解決。price→plan、`granted_at=now`、`expires_at=add_two_months(now)`、`quota_doc_id` を**全て txn 開始前のローカル値として確定**。uid/plan が解決不能 → error log + 200 return (txn に入らない)
+     2. **(txn)** 単一 `@fs.async_transactional`、本体は Firestore 操作のみ (ネットワーク呼び出し禁止):
+        - `pe_ref = fs.collection("processed_stripe_events").document(event.id)` を `await pe_ref.get(transaction=tx)`
+        - 既存 → `return` (skip。**この early-return は一切の `tx.set` より前**。retry 時 `now` 再計算されても書き込み前に抜けるので orphan quota doc は生じない)
+        - 未存在 → 手順 1 で確定済のローカル値を使い `tx.set(monthly_quota.document(quota_doc_id), quota_dict)` + `tx.set(pe_ref, {...})` を同一 txn コミット
+     - 並行二重配信時、Firestore async txn は read-set (`pe_ref`) 競合を検知し片方を retry。retry 側は `pe_ref` 既存を見て skip → **並行でも exactly-once** (C1 解消、親 spec の I4 契約を満たす)。txn 本体に I/O を持ち込まないので contention window は最小 (`booking_service` の book/cancel と同じく txn 内は単一 doc read→write のみ)
+   - **非クリティカル**:
+     - `checkout.session.completed`: **`user_repo.save` を先に実行 → その後 `claim()`** (NEW-5)。理由: このイベントだけが `stripe_customer_id` の唯一の運び手。claim-first だと save 失敗時に「課金済だが customer_id 無 → portal が永久 409」になる。save は冪等上書きなので、claim 前に二重処理されても無害。save 成功後に `claim()` で記録 (claim=False=既処理なら 2 度目の save をスキップしてもよいが、害が無いので save→claim の順を固定)
+     - `customer.subscription.updated` / `customer.subscription.deleted` / `invoice.payment_failed`: `if not await processed_repo.claim(event.id, event.type): return` (claim-first; `create()` の atomic fail-if-exists)。副作用は user doc の冪等上書きのみ (これらは情報の唯一の運び手ではない/再送で回復可能)
 3. `event.type` で dispatch:
 
 | event.type | handler |

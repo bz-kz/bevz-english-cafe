@@ -48,6 +48,7 @@ class FirestoreBookingRepository(BookingRepository):
             "status": booking.status.value,
             "created_at": booking.created_at,
             "cancelled_at": booking.cancelled_at,
+            "consumed_quota_doc_id": booking.consumed_quota_doc_id,
         }
 
     @staticmethod
@@ -60,4 +61,5 @@ class FirestoreBookingRepository(BookingRepository):
             status=BookingStatus(data["status"]),
             created_at=data["created_at"],
             cancelled_at=data.get("cancelled_at"),
+            consumed_quota_doc_id=data.get("consumed_quota_doc_id"),
         )

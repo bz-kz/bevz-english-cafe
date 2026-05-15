@@ -82,3 +82,41 @@ class TestFindByID:
 
     async def test_miss(self, repo):
         assert await repo.find_by_id(uuid4()) is None
+
+
+@pytest.fixture
+async def brepo():
+    client = fs.AsyncClient(project="test-project")
+    async for d in client.collection("bookings").stream():
+        await d.reference.delete()
+    return FirestoreBookingRepository(client)
+
+
+async def test_consumed_quota_doc_id_roundtrip(brepo):
+    b = Booking(
+        id=uuid4(),
+        slot_id="s1",
+        user_id="u1",
+        status=BookingStatus.CONFIRMED,
+        created_at=datetime.now(UTC),
+        cancelled_at=None,
+        consumed_quota_doc_id="u1_20260515090000123456",
+    )
+    await brepo.save(b)
+    got = await brepo.find_by_id(b.id)
+    assert got is not None
+    assert got.consumed_quota_doc_id == "u1_20260515090000123456"
+
+
+async def test_missing_consumed_quota_doc_id_defaults_none(brepo):
+    b = Booking(
+        id=uuid4(),
+        slot_id="s1",
+        user_id="u1",
+        status=BookingStatus.CONFIRMED,
+        created_at=datetime.now(UTC),
+        cancelled_at=None,
+    )
+    await brepo.save(b)
+    got = await brepo.find_by_id(b.id)
+    assert got is not None and got.consumed_quota_doc_id is None

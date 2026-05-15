@@ -44,6 +44,16 @@ class Settings(BaseSettings):
         None  # read for documentation; SDK auto-detects
     )
 
+    # --- Stripe (sub-project 4c-2) ---
+    stripe_secret_key: str = ""
+    stripe_webhook_secret: str = ""
+    stripe_price_light: str = ""
+    stripe_price_standard: str = ""
+    stripe_price_intensive: str = ""
+    stripe_portal_return_url: str = "http://localhost:3010/mypage/plan"
+    checkout_success_url: str = "http://localhost:3010/mypage/plan?status=success"
+    checkout_cancel_url: str = "http://localhost:3010/mypage/plan?status=cancel"
+
     model_config = ConfigDict(env_file=".env", case_sensitive=False)
 
 

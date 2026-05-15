@@ -210,12 +210,53 @@ class StripeService:
     async def _on_subscription_updated(
         self, event_id: str, etype: str, sub: Any
     ) -> None:
-        raise NotImplementedError
+        if not await self._processed.claim(event_id, etype):
+            return
+        uid = (sub.get("metadata") or {}).get("firebase_uid")
+        if not uid:
+            logger.error("subscription.updated missing firebase_uid")
+            return
+        user = await self._users.find_by_uid(uid)
+        if user is None:
+            logger.error("subscription.updated unknown uid %s", uid)
+            return
+        price_id = sub["items"]["data"][0]["price"]["id"]
+        plan = self._plan_for_price.get(price_id)
+        if plan is not None:
+            user.set_plan(plan)
+        cpe = sub.get("current_period_end")
+        user.update_subscription(
+            status=sub.get("status"),
+            cancel_at_period_end=sub.get("cancel_at_period_end"),
+            current_period_end=(datetime.fromtimestamp(cpe, tz=UTC) if cpe else None),
+        )
+        await self._users.save(user)
 
     async def _on_subscription_deleted(
         self, event_id: str, etype: str, sub: Any
     ) -> None:
-        raise NotImplementedError
+        if not await self._processed.claim(event_id, etype):
+            return
+        uid = (sub.get("metadata") or {}).get("firebase_uid")
+        if not uid:
+            logger.error("subscription.deleted missing firebase_uid")
+            return
+        user = await self._users.find_by_uid(uid)
+        if user is None:
+            return
+        user.clear_subscription()
+        await self._users.save(user)
 
     async def _on_payment_failed(self, event_id: str, etype: str, invoice: Any) -> None:
-        raise NotImplementedError
+        if not await self._processed.claim(event_id, etype):
+            return
+        resolved = await self._resolve_uid_plan(invoice)
+        if resolved is None:
+            return
+        uid, _plan = resolved
+        user = await self._users.find_by_uid(uid)
+        if user is None:
+            return
+        user.update_subscription(status="past_due")
+        await self._users.save(user)
+        await self._email.send_payment_failed(user.email, user.name)

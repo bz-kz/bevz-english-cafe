@@ -210,3 +210,64 @@ async def test_invoice_paid_any_billing_reason_grants(service, client):
         await service.handle_webhook(raw_payload=b"{}", sig_header="ok")
     docs = [d.to_dict() async for d in client.collection("monthly_quota").stream()]
     assert len(docs) == 1 and docs[0]["granted"] == 16  # Y: grants regardless
+
+
+async def test_subscription_updated_changes_plan_no_grant(service, client):
+    u = User(uid="su1", email="su1@example.com", name="Su1")
+    u.set_plan(Plan.LIGHT)
+    await FirestoreUserRepository(client).save(u)
+    sub = {
+        "metadata": {"firebase_uid": "su1"},
+        "items": {"data": [{"price": {"id": "price_standard"}}]},
+        "cancel_at_period_end": True,
+        "current_period_end": 1782000000,
+        "status": "active",
+    }
+    ev = _event("customer.subscription.updated", sub, "evt_su1")
+    with patch("stripe.Webhook.construct_event", return_value=ev):
+        await service.handle_webhook(raw_payload=b"{}", sig_header="ok")
+    got = await FirestoreUserRepository(client).find_by_uid("su1")
+    assert got.plan == Plan.STANDARD
+    assert got.subscription_cancel_at_period_end is True
+    assert got.current_period_end is not None
+    assert got.current_period_end.tzinfo is not None  # tz-aware UTC
+    docs = [d async for d in client.collection("monthly_quota").stream()]
+    assert docs == []  # Y: subscription.updated never grants
+
+
+async def test_subscription_deleted_clears_plan(service, client):
+    u = User(uid="sd1", email="sd1@example.com", name="Sd1")
+    u.set_plan(Plan.STANDARD)
+    u.update_subscription(subscription_id="sub_d")
+    await FirestoreUserRepository(client).save(u)
+    sub = {"metadata": {"firebase_uid": "sd1"}}
+    ev = _event("customer.subscription.deleted", sub, "evt_sd1")
+    with patch("stripe.Webhook.construct_event", return_value=ev):
+        await service.handle_webhook(raw_payload=b"{}", sig_header="ok")
+    got = await FirestoreUserRepository(client).find_by_uid("sd1")
+    assert got.plan is None
+    assert got.subscription_status == "canceled"
+    assert got.stripe_subscription_id is None
+
+
+async def test_payment_failed_sets_past_due_and_emails(service, client):
+    await FirestoreUserRepository(client).save(
+        User(uid="pf1", email="pf1@example.com", name="Pf1")
+    )
+    sub_obj = {
+        "metadata": {"firebase_uid": "pf1"},
+        "items": {"data": [{"price": {"id": "price_light"}}]},
+    }
+    ev = _event(
+        "invoice.payment_failed",
+        {"id": "in_pf", "subscription": "sub_pf"},
+        "evt_pf1",
+    )
+    with (
+        patch("stripe.Webhook.construct_event", return_value=ev),
+        patch("stripe.Subscription.retrieve", return_value=sub_obj),
+    ):
+        await service.handle_webhook(raw_payload=b"{}", sig_header="ok")
+    got = await FirestoreUserRepository(client).find_by_uid("pf1")
+    assert got.subscription_status == "past_due"
+    assert any(e.get("type") == "payment_failed" for e in service._email.sent_emails)

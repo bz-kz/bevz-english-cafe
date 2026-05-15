@@ -1,269 +1,204 @@
-# Stripe Integration (PR 4c) Design
+# Stripe Integration (PR 4c) Design — v2 (decomposed)
 
 ## Goal
 
-ユーザーが Stripe Checkout で月額サブスクリプション (Light / Standard / Intensive) を購入し、Stripe webhook 駆動で `monthly_quota` を付与する。プラン変更・解約・支払方法更新は Stripe Customer Portal に集約する。
+ユーザーが Stripe Checkout で月額サブスク (Light/Standard/Intensive) を購入し、Stripe webhook 駆動で `monthly_quota` を付与する。プラン変更・解約・支払方法更新は Stripe Customer Portal に集約する。
 
-## Motivation
+## Why decomposed
 
-sub-project 4b で plan + monthly_quota の仕組みは実装済みだが、quota は admin が手動 (script) で付与するしかない。実際の課金 → 自動 quota 付与のループを Stripe で閉じる。
+独立レビュー (2026-05-15) で、quota モデル変更が既存の money-adjacent transaction (booking_service の book/cancel/admin_force_*) の書き換えを伴い、Stripe 新規コードと結合すると rollback 不能になることが判明。**3 つの独立 sub-project に分割**する。各 sub-project は単体で動作・テスト可能。
 
-## Settled Requirements
+| Sub-project | 内容 | 依存 | リスク |
+|---|---|---|---|
+| **4c-1** | MonthlyQuota multi-doc + FIFO 化 + 4b cron 整合 + migration | なし (先行) | 高 |
+| **4c-2** | StripeService + webhook + billing endpoints | 4c-1 | 中 |
+| **4c-3** | frontend `/mypage/plan` + Customer Portal 導線 | 4c-2 | 低 |
+
+実装順: 4c-1 → 4c-2 → 4c-3。本ドキュメントは 4c-1 を完全仕様化し、4c-2/4c-3 はインターフェース境界のみ定義 (詳細は各 sub-project の spec で別途)。
+
+## Settled Requirements (全 sub-project 共通)
 
 | # | 項目 | 決定 |
 |---|---|---|
 | Q1 | 価格 | Light ¥6,000 / Standard ¥10,000 / Intensive ¥15,000 (税抜) |
-| Q2 | 消費税 | Stripe Tax 有効化 (10% 自動加算, JP インボイス対応) |
-| Q3 | 課金サイクル | 加入日基準の月額 (Stripe デフォルト) |
-| Q4 | quota grant | Stripe webhook `invoice.paid` 駆動 + 加入時即時 + 有効期限 2 ヶ月 + FIFO 消費。毎月 1 日 cron は admin 手動プラン用に残す |
-| Q5 | プラン変更 | proration (日割り) + 即時切替 + 差分 quota grant |
-| Q6 | 解約 | 期間末解約 (`cancel_at_period_end`)、返金なし |
-| Q7 | Customer Portal | Stripe Portal 使用 (支払方法/解約/プラン変更/請求書) |
-| Q8 | trial period | なし (加入即課金) |
-| Q9 | 支払失敗 | Stripe Smart Retries + ユーザーへメール通知 (失敗時 / 最終 cancel 時) |
+| Q2 | 消費税 | Stripe Tax 有効化 (10% 自動加算) |
+| Q3 | 課金サイクル | 加入日基準の月額 |
+| Q4 | quota grant | webhook `invoice.paid` 駆動 + 加入時即時 + 有効期限 2 ヶ月 + FIFO 消費。1 日 cron は admin プラン用に存続 (新スキームに移行) |
+| Q5 | プラン変更 | proration + 即時切替 + 差分 quota grant |
+| Q6 | 解約 | 期間末解約、返金なし |
+| Q7 | Customer Portal | Stripe Portal 使用 |
+| Q8 | trial period | なし |
+| Q9 | 支払失敗 | Smart Retries + メール通知 |
 | Q10 | 加入 flow | Firebase login → mypage プラン選択 → Checkout |
-| Q11 | user↔customer 紐付け | `client_reference_id = uid` + `users.{uid}.stripe_customer_id` 保存 |
+| Q11 | user↔customer 紐付け | `client_reference_id=uid` + `subscription.metadata.firebase_uid=uid` + `users.{uid}.stripe_customer_id` |
+| D1 | スコープ | 3 PR 分割 |
+| D2 | doc-id 整合 | 4b cron を新スキームに移行 (reader 1 系統) |
+| D3 | 二重付与 | `invoice.paid` は `billing_reason==subscription_update` 時 skip。`subscription.updated` が差分 grant |
+| D4 | migration | backfill script で旧 quota 変換。pre-4c booking (consumed_quota_doc_id 無) の cancel は quota refund 諦め |
 
-## Architecture
+---
 
-### Approach
+# Sub-project 4c-1 — Quota Model: multi-doc + FIFO + 2-month expiry
 
-**Stripe Python SDK 直接統合**。`StripeService` が Checkout / Portal session 作成と webhook dispatch を担う。Firebase Extension (`firestore-stripe-payments`) は Firestore Native + 自前 backend と相性が悪いため不採用。
+## 目的
 
-### Data flow
+`monthly_quota` を「1 ユーザー 1 月 1 doc」から「1 ユーザー複数 doc・各 doc 2 ヶ月有効・FIFO 消費」に変更する。Stripe を一切含まない。完了時点で既存の admin 手動プラン + 4b cron が新モデルで動作する。
 
+## 現状 (4b) の把握
+
+- `MonthlyQuota` dataclass: `user_id, year_month, plan_at_grant, granted, used, granted_at, expires_at` + `__post_init__` で `0 <= used <= granted`
+- `FirestoreMonthlyQuotaRepository._doc_id = f"{user_id}_{year_month}"` (1 月 1 doc)
+- `booking_service.py`: `book` / `cancel` / `admin_force_book` / `admin_force_cancel` が `f"{uid}_{_jst_year_month(...)}"` で単一 doc を read/update
+- `monthly-quota-grant` Cloud Function (terraform `cloud-function-monthly-quota-grant`): 毎月 1 日 0:00 JST、対象ユーザーに `{uid}_{YYYY-MM}` doc を作成
+
+## 設計
+
+### MonthlyQuota entity (フィールド維持・意味変更)
+
+`year_month` は廃止せず **grant 月の JST 表記 (監査・表示用メタ)** として保持。一意キーは doc id に移譲。`__post_init__` 制約はそのまま。
+
+### doc-id スキーム
+
+新: `{uid}_{granted_at:%Y%m%d%H%M%S%f}` (マイクロ秒まで含め衝突回避)。`FirestoreMonthlyQuotaRepository`:
+- `save(quota)` → 新 doc-id で set
+- `find(user_id, year_month)` (既存 API) は **deprecated**、内部利用箇所を `find_active_for_user` に置換後に削除
+- 新 `find_active_for_user(user_id: str, at: datetime) -> list[MonthlyQuota]`:
+  - query は `where("user_id", "==", uid)` の **単一等価フィルタのみ** (C3 回避: 複合 index 不要)
+  - 取得後 Python 側で `expires_at > at AND used < granted` を filter
+  - `granted_at` ASC sort (FIFO)
+  - 1 ユーザーの quota doc は高々数件なので全件取得で問題なし
+- 新 `find_by_doc_id(doc_id: str) -> MonthlyQuota | None` (cancel の refund 用)
+
+### expires_at 計算
+
+`granted_at` の 2 ヶ月後・同日・同時刻。月末日跨ぎは標準ライブラリのみで実装 (dateutil 追加しない):
+
+```python
+def add_two_months(dt: datetime) -> datetime:
+    month = dt.month - 1 + 2
+    year = dt.year + month // 12
+    month = month % 12 + 1
+    # 翌々月に day が無ければ月末へ丸め (1/31 -> 3/31, 12/31 -> 2/28|29)
+    import calendar
+    day = min(dt.day, calendar.monthrange(year, month)[1])
+    return dt.replace(year=year, month=month, day=day)
 ```
-User (Firebase logged in)
-  │  mypage プラン選択
-  ▼
-Frontend POST /api/v1/billing/checkout { plan }
-  │  StripeService.create_checkout_session (mode=subscription, automatic_tax, client_reference_id=uid)
-  ▼
-Stripe Checkout (hosted)
-  │  payment success → redirect /mypage/plan?status=success
-  │  ──────────────────────────────────────────────► Stripe Webhook
-  ▼                                                          │
-                                          POST /api/v1/billing/webhook
-                                                  │ signature verify
-                                                  │ idempotency check (processed_stripe_events)
-                                                  ▼
-                                          dispatch by event.type:
-                                          - checkout.session.completed → save stripe_customer_id / subscription_id
-                                          - invoice.paid               → grant MonthlyQuota (+2mo expiry)
-                                          - customer.subscription.updated → users.plan 更新 + 差分 quota grant
-                                          - customer.subscription.deleted → users.plan = null
-                                          - invoice.payment_failed     → email 通知
+
+### `Booking` entity 追加
+
+```python
+consumed_quota_doc_id: str | None = None  # FIFO で減算した quota doc。trial / pre-4c は None
 ```
 
-### Stripe Dashboard 手動設定 (terraform 化しない)
+`FirestoreBookingRepository._to_dict`/`_from_dict` にマッピング追加 (欠損時 None)。
+
+### `BookingService` FIFO 改修 (4 メソッド)
+
+`book` (非 trial) transaction:
+1. **read phase**: `find_active_for_user(uid, now)` を transaction 外で事前取得は不可 (整合性) → transaction 内で `users` 等価 query を stream。Firestore async txn は collection query read を許容。取得 docs を granted_at ASC、`used < granted` filter
+2. 該当無し → doc が 1 件も無ければ `NoActiveQuotaError`、全て exhausted なら `QuotaExhaustedError`
+3. 最古 doc を選択し doc-id を確定
+4. **write phase**: 当該 doc を `used += 1`、booking に `consumed_quota_doc_id` セット
+
+`cancel` / `admin_force_cancel`:
+- `booking.consumed_quota_doc_id` が非 None → `find_by_doc_id` で読んで `used = max(0, used-1)`
+- None (trial / pre-4c) → quota refund skip (trial は従来の `trial_used` ロールバックのみ)
+
+`admin_force_book` (`consume_quota=True`, 非 trial): 上記 FIFO と同一パス。active doc 皆無なら warning log + skip (4d 既存挙動踏襲、booking 自体は成功)。
+
+### 4b Cloud Function 移行 (D2=a)
+
+`terraform/modules/cloud-function-monthly-quota-grant/source/main.py` を改修:
+- doc-id を `{uid}_{granted_at:%Y%m%d%H%M%S%f}` に
+- `expires_at = add_two_months(granted_at)` (同ロジックを関数内に複製 — Cloud Function は backend を import しない)
+- `year_month` は grant 実行時の JST 月
+- 冪等性: 「同一ユーザーで今月 grant 済みなら skip」を `granted_at` の JST 月一致で判定 (旧: doc 存在チェック)
+
+### Migration script (D4=a)
+
+`scripts/migrate_quota_to_multidoc.py`:
+- 既存 `{uid}_{YYYY-MM}` パターンの doc を走査
+- 各々 `granted_at = year_month の 1 日 0:00 JST`、`expires_at = add_two_months(granted_at)` で新 doc-id に複製
+- 旧 doc は削除 (--dry-run で確認可)
+- pre-4c の booking は `consumed_quota_doc_id` を後付けしない (cancel refund は諦め: 本番未ローンチで件数僅少)
+
+### `/users/me` quota 表示改修 (I3)
+
+`api/endpoints/users.py` の `/users/me`:
+- 旧 `current_month_quota: MonthQuotaSummary | null` を廃止
+- 新 `quota_summary: { total_remaining: int, next_expiry: datetime | null }`
+  - `find_active_for_user(uid, now)` を集計、`total_remaining = Σ(granted-used)`、`next_expiry = min(expires_at)`
+- frontend `booking.ts` `MeResponse` + `ProfileCard.tsx` を新フィールドに追従 (4c-1 スコープ内、frontend も触る)
+
+## 4c-1 Testing
+
+`tests/services/test_booking_service.py` 拡張:
+- 複数 active doc 合算で残数判定
+- FIFO: 最古 doc から `used+1`、`booking.consumed_quota_doc_id` 記録
+- 期限切れ doc は残数に数えない
+- cancel が `consumed_quota_doc_id` の doc を refund
+- pre-4c booking (consumed_quota_doc_id=None) cancel は refund skip・例外なし
+- admin_force_book consume_quota で FIFO 経路 / 該当無しで warning skip
+
+`tests/infrastructure/repositories/test_firestore_monthly_quota_repository.py` 拡張:
+- `find_active_for_user` が expired / exhausted を除外し granted_at ASC
+- `find_by_doc_id`
+- `add_two_months` 単体 (1/31→3/31, 12/31→2/28, 通常)
+
+`terraform/modules/cloud-function-monthly-quota-grant/source/test_main.py` 拡張:
+- 新 doc-id・expires_at
+- 同月二重実行で skip
+
+migration script: `scripts/` に簡易テスト or `--dry-run` 手動検証手順を README 化。
+
+frontend: `ProfileCard` テストを新 `quota_summary` 形に更新。
+
+## 4c-1 Migration / Rollback
+
+- backfill script は冪等 (旧 doc 削除前に新 doc 作成、--dry-run あり)
+- rollback: 4c-1 は feature flag 無し。問題時は git revert + 逆 migration (新→旧) script が必要 → **本番 quota データが少ない段階で投入する** ことを ops 前提とする
+- 4b cron 改修と migration script は同一 PR 内 (中途半端な doc-id 混在を残さない)
+
+---
+
+# Sub-project 4c-2 — Stripe Backend (interface only here)
+
+詳細仕様は 4c-2 着手時に別 spec。境界のみ確定:
+
+- `StripeService` (`app/services/stripe_service.py`): `create_checkout_session`, `create_portal_session`, `handle_webhook`
+- 依存: `UserRepository`, `MonthlyQuotaRepository` (4c-1 の `save` を使い grant), `EmailService`, `ProcessedEventRepository` (新規・I4 対応)
+- endpoints `app/api/endpoints/billing.py`: `POST /billing/checkout`, `POST /billing/portal`, `POST /billing/webhook`
+- `User` entity 追加: `stripe_customer_id`, `stripe_subscription_id`, `subscription_status`, `subscription_cancel_at_period_end`, `current_period_end`
+- webhook idempotency (I4): `ProcessedEventRepository.create_if_absent(event_id)` を **Firestore transaction で create (既存なら例外) → 副作用** を 1 トランザクション化。並行配信で二重 grant しない
+- 二重付与回避 (D3): `invoice.paid` handler は `invoice.billing_reason == "subscription_update"` の時 grant skip。`customer.subscription.updated` が `PLAN_QUOTA[new]-PLAN_QUOTA[old]>0` の差分を 4c-1 の `MonthlyQuotaRepository.save` で grant
+- quota grant は必ず 4c-1 の `save` (新 doc-id) を経由 — 4c-2 は doc-id スキームを知らない
+- env: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_LIGHT|STANDARD|INTENSIVE` (HCP sensitive)
+- Stripe SDK は test で mock。実 key 不要
+
+---
+
+# Sub-project 4c-3 — Frontend Plan UI (interface only here)
+
+詳細仕様は 4c-3 着手時に別 spec。境界のみ:
+
+- `/mypage/plan` ページ: 未加入=3 プラン self-checkout、加入済=現状表示 + Stripe Portal ボタン (プラン変更/解約は Portal 集約)
+- `frontend/src/lib/billing.ts`: `createCheckout(plan)`, `createPortal()`
+- `NEXT_PUBLIC_STRIPE_ENABLED` feature flag で UI gate
+- `?status=success` で getMe 再取得 + トースト
+- ProfileCard / nav 導線追加 (4c-1 で `quota_summary` 化済の上に積む)
+
+---
+
+## Stripe Dashboard 手動設定 (terraform 化しない・4c-2 着手前)
 
 | 項目 | 設定 |
 |---|---|
 | Products | `light`, `standard`, `intensive` |
-| Prices | 各 product に Recurring monthly (JPY 税抜 6,000 / 10,000 / 15,000) |
-| Tax | Stripe Tax 有効化、Japan registration |
-| Customer Portal | 有効化: payment method update / cancel (period end) / plan switch / invoice history |
-| Webhook endpoint | `https://api.bz-kz.com/api/v1/billing/webhook` |
-| Webhook events | `checkout.session.completed`, `invoice.paid`, `invoice.payment_failed`, `customer.subscription.updated`, `customer.subscription.deleted` |
+| Prices | Recurring monthly JPY 税抜 6,000 / 10,000 / 15,000 |
+| Tax | Stripe Tax 有効化 + Japan registration |
+| Customer Portal | payment method / cancel(period end) / plan switch / invoice |
+| Webhook | `https://api.bz-kz.com/api/v1/billing/webhook`、events: `checkout.session.completed`, `invoice.paid`, `invoice.payment_failed`, `customer.subscription.updated`, `customer.subscription.deleted` |
 
-### Environment variables
+## Out of Scope (全体)
 
-| Var | Scope | 値 | 管理 |
-|---|---|---|---|
-| `STRIPE_SECRET_KEY` | backend | `sk_live_...` / `sk_test_...` | HCP workspace sensitive var → Cloud Run env |
-| `STRIPE_WEBHOOK_SECRET` | backend | `whsec_...` | 同上 (deploy 後に投入) |
-| `STRIPE_PRICE_LIGHT` | backend | `price_...` | HCP var |
-| `STRIPE_PRICE_STANDARD` | backend | `price_...` | HCP var |
-| `STRIPE_PRICE_INTENSIVE` | backend | `price_...` | HCP var |
-| `NEXT_PUBLIC_STRIPE_ENABLED` | frontend | `true` | Vercel env (HCP `env_vars`) — UI feature flag |
-
-ローカル test は `STRIPE_SECRET_KEY=sk_test_dummy` + SDK mock。実 key 不要。
-
-## Backend Changes
-
-### `User` entity 追加フィールド
-
-```python
-stripe_customer_id: str | None = None
-stripe_subscription_id: str | None = None
-subscription_status: str | None = None  # 'active' | 'past_due' | 'canceled' | None
-subscription_cancel_at_period_end: bool = False
-current_period_end: datetime | None = None
-```
-
-`FirestoreUserRepository._to_dict` / `_from_dict` に上記をマッピング追加。
-
-### `MonthlyQuota` の複数 doc + FIFO
-
-既存 `MonthlyQuota` (user_id, year_month, plan_at_grant, granted, used, granted_at, expires_at) を維持。変更点:
-
-- `expires_at` = granted_at の 2 ヶ月後の同日 (例: 5/15 grant → 7/15 00:00 JST に失効)。月末日跨ぎは `dateutil.relativedelta(months=2)` 相当のロジックで算出 (5/31 → 7/31, 12/31 → 翌2/28)
-- doc id を `{uid}_{granted_at:%Y%m%d%H%M%S}` に変更し、1 ユーザーが複数 active doc を持てる
-- 新 query: `FirestoreMonthlyQuotaRepository.find_active_for_user(user_id: str, at: datetime) -> list[MonthlyQuota]`
-  - 条件: `user_id == uid AND expires_at > at`
-  - 残数 > 0 (used < granted) を Python 側でフィルタ
-  - `granted_at` ASC ソート (FIFO)
-
-### `Booking` entity 追加フィールド
-
-```python
-consumed_quota_doc_id: str | None = None  # どの MonthlyQuota から 1 コマ引いたか (trial は None)
-```
-
-`FirestoreBookingRepository` の dict マッピングに追加。
-
-### `BookingService.book` FIFO 改修
-
-非 trial 予約 transaction 内:
-1. `find_active_for_user(uid, now)` で active quota docs 取得 (read phase)
-2. 残数合計 0 → `QuotaExhaustedError`、doc が 1 件も無い → `NoActiveQuotaError`
-3. 最古 (granted_at 最小) の残ありの doc を選択
-4. write phase で当該 quota doc `used += 1`、booking に `consumed_quota_doc_id` を記録
-
-`admin_force_book` の `consume_quota=True` も同じ FIFO パスを通す。quota doc が 1 件も無い場合は warning log + skip (4d 既存仕様)。
-
-### `BookingService.cancel` / `admin_force_cancel` refund 改修
-
-`booking.consumed_quota_doc_id` が非 None なら当該 doc を `used = max(0, used - 1)`。trial は従来通り `users.trial_used` ロールバック (admin force-cancel `refund_trial`)。`consumed_quota_doc_id` が None (古いデータ / trial) の場合は quota refund skip。
-
-### 新サービス `StripeService`
-
-`app/services/stripe_service.py`:
-
-```python
-class StripeService:
-    def __init__(self, *, secret_key, webhook_secret, price_map: dict[Plan, str],
-                 user_repo, quota_repo, email_service, fs_client): ...
-
-    async def create_checkout_session(self, *, user: User, plan: Plan) -> str
-    async def create_portal_session(self, *, user: User) -> str
-    async def handle_webhook(self, *, raw_payload: bytes, sig_header: str) -> None
-```
-
-- `create_checkout_session`: `stripe.checkout.Session.create(mode="subscription", line_items=[{price, quantity:1}], client_reference_id=user.uid, subscription_data={"metadata": {"firebase_uid": user.uid}}, customer=user.stripe_customer_id or None, customer_email=user.email if no customer, automatic_tax={"enabled": True}, success_url, cancel_url)` → returns `session.url`
-  - `subscription_data.metadata.firebase_uid` を必ず設定する。これにより後続の全 invoice/subscription event で `subscription.metadata.firebase_uid` から uid を引ける (webhook 配信順序に依存しない)
-- `create_portal_session`: `stripe.billing_portal.Session.create(customer=user.stripe_customer_id, return_url)` → returns `session.url`。stripe_customer_id 無ければ `HTTPException 409`
-- `handle_webhook`:
-  1. `stripe.Webhook.construct_event(payload, sig_header, webhook_secret)` — 失敗時 raise → endpoint が 400
-  2. idempotency: `processed_stripe_events/{event.id}` doc 存在チェック、あれば return。無ければ処理後に記録
-  3. `event.type` で dispatch:
-
-| event.type | handler 動作 |
-|---|---|
-| `checkout.session.completed` | `client_reference_id`=uid で User 取得、`stripe_customer_id` / `stripe_subscription_id` / `subscription_status='active'` を保存。plan を price→Plan 逆引きして `users.plan` / `plan_started_at` set |
-| `invoice.paid` | `subscription.metadata.firebase_uid` で User 特定 (event 順序非依存)。subscription の price から plan 判定 → `PLAN_QUOTA[plan]` 分の MonthlyQuota 新規作成 (granted_at=now, expires_at=now+2mo, plan_at_grant=plan)。`billing_reason` が `subscription_update` (proration) の場合も full grant (簡略化) |
-| `customer.subscription.updated` | price→plan 逆引き。`users.plan` 更新。旧 plan より上位なら差分 `PLAN_QUOTA[new]-PLAN_QUOTA[old]` を即 grant (正のときのみ、別 MonthlyQuota doc)。`cancel_at_period_end` / `current_period_end` / `status` を User に反映 |
-| `customer.subscription.deleted` | `users.plan=null`, `subscription_status='canceled'`, `stripe_subscription_id=null` |
-| `invoice.payment_failed` | `subscription_status='past_due'` set + `EmailService` で支払失敗通知メール。Stripe Smart Retries が最終失敗 → `customer.subscription.deleted` が別途飛ぶ |
-
-price→Plan 逆引きは env の `STRIPE_PRICE_*` から構築した `dict[str, Plan]`。
-
-### 新 endpoints `app/api/endpoints/billing.py`
-
-```
-POST /api/v1/billing/checkout   auth=get_current_user  body={plan}      -> {url}
-POST /api/v1/billing/portal     auth=get_current_user  body={}          -> {url}
-POST /api/v1/billing/webhook    認証なし (Stripe 署名で検証)            -> 200 {}
-```
-
-`/users/me` (既存) のレスポンスに subscription フィールド (`stripe_subscription_id`, `subscription_status`, `subscription_cancel_at_period_end`, `current_period_end`) を追加。
-
-`webhook` endpoint は raw body が必要 (`await request.body()`)。CORS 対象外 (Stripe からのサーバ間 POST)。
-
-### Idempotency collection
-
-`processed_stripe_events/{event_id}` — `{ "processed_at": datetime }`。webhook 二重配信を防ぐ。
-
-## Frontend Changes
-
-### 新規ページ `/mypage/plan`
-
-| File | 役割 |
-|---|---|
-| `frontend/src/app/mypage/plan/page.tsx` | プランページ (client component) |
-| `frontend/src/app/mypage/plan/_components/PlanCard.tsx` | 1 プラン表示 + 選択ボタン |
-| `frontend/src/app/mypage/plan/_components/SubscriptionStatus.tsx` | 現契約状況 + Portal ボタン |
-| `frontend/src/lib/billing.ts` | `createCheckout(plan)`, `createPortal()`, 型 |
-
-挙動:
-- 未加入: 3 プランカードに `[選択]` → `POST /billing/checkout` → `window.location = url`
-- 加入済: 現プランは「現在」表示。プラン変更/解約は `[支払い・解約を管理]` → `POST /billing/portal` → Portal へ redirect (自前のプラン変更ロジックは持たない)
-- `?status=success` クエリ時: 「ご登録ありがとうございます」トースト + `getMe()` 再取得
-
-### 既存変更
-
-- `frontend/src/lib/booking.ts` `MeResponse` に subscription フィールド追加
-- `frontend/src/app/mypage/_components/ProfileCard.tsx` に「プラン管理」リンク (`/mypage/plan`)
-- mypage ナビに導線追加
-- `NEXT_PUBLIC_STRIPE_ENABLED !== 'true'` の時はプラン UI 非表示 (feature flag)
-
-## Error Handling
-
-| 状況 | 挙動 |
-|---|---|
-| webhook 署名不正 | endpoint 400、処理しない |
-| webhook 重複 event | idempotency で skip、200 返す |
-| checkout で stripe_customer_id 未設定 | Stripe が新規 customer 作成 (customer_email 渡す) |
-| portal で stripe_customer_id 無し | 409 + フロントは「まだ加入していません」表示 |
-| `invoice.paid` で user 不明 (subscription.metadata.firebase_uid 取れない) | error log、200 返す (Stripe 再送ループ防止) |
-| 支払失敗 | `subscription_status='past_due'` + メール、Stripe retry に委譲 |
-
-## Testing
-
-### Backend (pytest + Firestore emulator + Stripe SDK mock)
-
-`tests/services/test_stripe_service.py`:
-- `create_checkout_session` が正しい params (client_reference_id, price, automatic_tax) で `stripe.checkout.Session.create` 呼ぶ
-- webhook signature 不正 → 例外
-- `checkout.session.completed` → users.{uid} に stripe_customer_id / subscription_id / plan 保存
-- `invoice.paid` → MonthlyQuota 作成 (granted=PLAN_QUOTA, expires=+2mo)
-- `invoice.paid` 重複 event id → idempotent skip
-- `customer.subscription.updated` Light→Standard → plan 更新 + 差分 4 quota grant
-- `customer.subscription.updated` `cancel_at_period_end=true` → User フラグ反映
-- `customer.subscription.deleted` → plan=null
-- `invoice.payment_failed` → EmailService 呼ばれる + status=past_due
-
-`tests/services/test_booking_service.py` 拡張:
-- 複数 active quota の合算で残数判定
-- FIFO: 最古 doc から used+1、booking.consumed_quota_doc_id 記録
-- cancel が consumed_quota_doc_id の doc を refund
-- 期限切れ quota は残数に数えない
-
-`tests/api/test_billing_endpoints.py`:
-- checkout/portal 非ログイン → 401
-- checkout がログイン時 url 返す
-- webhook 無署名 → 400
-- webhook 正常 → 200
-
-### Frontend (jest + RTL)
-
-- `billing.ts` export テスト
-- `PlanCard` — 現プランは選択不可表示、他は `[選択]` ボタン
-- `SubscriptionStatus` — active / past_due / 解約予定 の表示分岐
-- `mypage/plan/page` smoke (feature flag false で非表示)
-
-## Out of Scope
-
-- 年額プラン (月額のみ)
-- クーポン / プロモコード
-- 1 user 複数サブスク (1 plan 前提)
-- Stripe Connect / マルチテナント
-- 請求書テンプレートカスタマイズ (Stripe デフォルト invoice)
-- proration 時の厳密な日割り quota (簡略化: full grant)
-
-## Migration / Rollback
-
-- 全て新規追加。既存予約フローへの影響は MonthlyQuota FIFO 改修のみ
-- FIFO 改修は単一 doc でも動作 (後方互換)
-- `NEXT_PUBLIC_STRIPE_ENABLED=false` で UI 非表示 → feature flag rollback
-- webhook 障害時: Stripe 自動 retry (最大 3 日) + `processed_stripe_events` で重複防御
-- `monthly-quota-grant` Cloud Function (4b) は削除せず admin 手動プラン用に存続
-
-## Ops 手順 (本番投入)
-
-1. Stripe Dashboard: Product / Price / Tax / Customer Portal 設定 (test mode 先行)
-2. HCP workspace `english-cafe-prod-cloudrun` に `STRIPE_SECRET_KEY` / `STRIPE_PRICE_*` (sensitive) 投入
-3. backend deploy
-4. Stripe Dashboard で webhook endpoint (`https://api.bz-kz.com/api/v1/billing/webhook`) 登録 → `STRIPE_WEBHOOK_SECRET` 取得 → HCP 投入 → 再 deploy
-5. Vercel に `NEXT_PUBLIC_STRIPE_ENABLED=true` 投入 → frontend deploy
-6. test mode で E2E (テストカード `4242...`) → 本番 key に切替
+年額プラン / クーポン / 1user複数sub / Stripe Connect / invoice テンプレ / proration の厳密日割り quota (full grant 簡略化) / pre-4c booking の quota refund 救済

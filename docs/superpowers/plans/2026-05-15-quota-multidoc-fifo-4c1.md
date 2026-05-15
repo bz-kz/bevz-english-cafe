@@ -373,6 +373,8 @@ git add backend/app/domain/repositories/monthly_quota_repository.py \
 git commit -m "feat(quota): granted_at doc-id + find_active_for_user/find_by_doc_id"
 ```
 
+> ⚠️ **KNOWN BREAKAGE introduced here, fixed in Task 4/5:** After this task, `save()` writes the new `{uid}_{granted_at:%f}` id but legacy `find(uid, ym)` reads `{uid}_{ym}` → returns `None`. Existing tests in `backend/tests/services/test_booking_service.py` that assert via `quota_repo.find(user.uid, ym)` will FAIL at this point: `test_book_increments_used_in_quota` (line 241), `test_cancel_within_24h_rejected_and_quota_unchanged` (line 297), `test_cancel_more_than_24h_refunds_quota` (line 309), `test_cancel_trial_does_not_touch_quota` (line 322). This is expected — do NOT run the full `test_booking_service.py` green-gate until Task 5 completes. Run only the repo test (Step 5) to gate this task.
+
 ---
 
 ## Task 3: `Booking.consumed_quota_doc_id`
@@ -528,45 +530,87 @@ git commit -m "feat(booking): add consumed_quota_doc_id field (FIFO refund key)"
 
 Context: current `book` (non-trial branch) reads `monthly_quota/{uid}_{ym}` single doc and does `used += 1`. Replace with: stream `where user_id == uid` inside the txn read phase, pick oldest non-expired non-exhausted, increment it, set `booking.consumed_quota_doc_id`.
 
-- [ ] **Step 1: Write the failing tests**
+- [ ] **Step 1: Rewrite the 4 legacy-`find()` assertions FIRST**
 
-Append to `backend/tests/services/test_booking_service.py` (reuse its existing fixtures `service`, `firestore_client`, and helpers; mirror existing style — if helper names differ, adapt):
+These existing tests in `backend/tests/services/test_booking_service.py` assert via `quota_repo.find(user.uid, ym)` which now returns `None`. Rewrite each assertion to read the consumed doc instead. Helpers in the file: `_persist_user`, `_quota(user_id=..., granted=..., used=...)`, `_slot(start_offset_hours=...)`, `FirestoreLessonSlotRepository(service._fs)`.
 
+`test_book_increments_used_in_quota` (lines 234-242) — replace lines 240-242:
 ```python
-async def test_book_fifo_consumes_oldest(service, firestore_client):
-    # two active quota docs, oldest must be decremented
-    from datetime import UTC, datetime, timedelta
-    from app.domain.entities.monthly_quota import MonthlyQuota
-    from app.infrastructure.repositories.firestore_monthly_quota_repository import (
-        FirestoreMonthlyQuotaRepository,
-    )
-    qrepo = FirestoreMonthlyQuotaRepository(firestore_client)
-    now = datetime.now(UTC)
-    old = MonthlyQuota("u1", "2026-04", "light", 4, 0,
-                        now - timedelta(days=20), now + timedelta(days=40))
-    new = MonthlyQuota("u1", "2026-05", "light", 4, 0,
-                        now - timedelta(days=2), now + timedelta(days=58))
-    await qrepo.save(old)
-    await qrepo.save(new)
-    # create user + slot via existing helpers in this file, then:
-    booking = await service.book(user=<user u1>, slot_id=<slot>)
-    assert booking.consumed_quota_doc_id == f"u1_{old.granted_at.strftime('%Y%m%d%H%M%S%f')}"
-    refreshed_old = await qrepo.find_by_doc_id(booking.consumed_quota_doc_id)
-    assert refreshed_old.used == 1
+    assert booking.consumed_quota_doc_id is not None
+    q = await quota_repo.find_by_doc_id(booking.consumed_quota_doc_id)
+    assert q is not None and q.used == 1
+```
+(capture `booking = await service.book(...)` on line 239 — it currently discards the return; assign it.)
+
+`test_cancel_within_24h_rejected_and_quota_unchanged` (lines 283-298) — replace lines 296-298:
+```python
+    q = await quota_repo.find_by_doc_id(booking.consumed_quota_doc_id)
+    assert q is not None and q.used == 1  # quota stays consumed
 ```
 
-> NOTE for implementer: `test_booking_service.py` already builds users/slots with module helpers (see top of file). Use those exact helpers rather than the pseudo-`<user u1>` placeholders. Add these scenarios:
-> - `test_book_fifo_consumes_oldest` (above)
-> - `test_book_no_active_quota_raises_NoActiveQuotaError` (no quota docs at all)
-> - `test_book_all_exhausted_raises_QuotaExhaustedError` (docs exist, all used==granted)
-> - `test_book_skips_expired_quota` (only expired docs → QuotaExhaustedError or NoActiveQuotaError per existing semantics; assert the same error the old single-doc path raised when missing)
+`test_cancel_more_than_24h_refunds_quota` (lines 301-310) — replace lines 308-310:
+```python
+    q = await quota_repo.find_by_doc_id(booking.consumed_quota_doc_id)
+    assert q is not None and q.used == 0
+```
 
-- [ ] **Step 2: Run — expect failure**
+`test_cancel_trial_does_not_touch_quota` (lines 313-323) — trial never consumes quota, so `booking.consumed_quota_doc_id is None`. Replace lines 321-323:
+```python
+    assert booking.consumed_quota_doc_id is None  # trial path never touches quota
+```
 
-Run: `cd backend && FIRESTORE_EMULATOR_HOST=localhost:8080 uv run pytest tests/services/test_booking_service.py -v -k fifo`
+`test_book_rejects_when_no_quota_row` (245-250) and `test_book_rejects_when_quota_exhausted` (253-259) use `pytest.raises` only — **leave unchanged**. With the FIFO impl: no docs → `NoActiveQuotaError` (matches), `_quota(granted=4, used=4)` exists but exhausted → `QuotaExhaustedError` (matches).
+
+- [ ] **Step 2: Add the new FIFO scenario tests**
+
+Append to `backend/tests/services/test_booking_service.py` (use the file's `_persist_user`/`_quota`/`_slot` helpers + `quota_repo` fixture; `_quota` signature is `_quota(user_id, granted=4, used=0, granted_at=?, expires_at=?)` — check its definition near the top of the file and pass `granted_at`/`expires_at` explicitly for the two-doc test):
+
+```python
+async def test_book_fifo_consumes_oldest(service, quota_repo, user_repo):
+    from datetime import UTC, datetime, timedelta
+    user = await _persist_user(user_repo, uid="u-fifo", plan=Plan.LIGHT)
+    now = datetime.now(UTC)
+    older = _quota(user_id=user.uid, granted=4, used=0)
+    older.granted_at = now - timedelta(days=20)
+    older.expires_at = now + timedelta(days=40)
+    newer = _quota(user_id=user.uid, granted=4, used=0)
+    newer.granted_at = now - timedelta(days=2)
+    newer.expires_at = now + timedelta(days=58)
+    await quota_repo.save(older)
+    await quota_repo.save(newer)
+    slot = _slot()
+    await FirestoreLessonSlotRepository(service._fs).save(slot)
+    booking = await service.book(user=user, slot_id=str(slot.id))
+    expected = f"{user.uid}_{older.granted_at.strftime('%Y%m%d%H%M%S%f')}"
+    assert booking.consumed_quota_doc_id == expected
+    refreshed = await quota_repo.find_by_doc_id(expected)
+    assert refreshed is not None and refreshed.used == 1
+
+
+async def test_book_skips_expired_quota_raises_exhausted(
+    service, quota_repo, user_repo
+):
+    from datetime import UTC, datetime, timedelta
+    user = await _persist_user(user_repo, uid="u-exp", plan=Plan.LIGHT)
+    now = datetime.now(UTC)
+    expired = _quota(user_id=user.uid, granted=4, used=0)
+    expired.granted_at = now - timedelta(days=90)
+    expired.expires_at = now - timedelta(days=1)
+    await quota_repo.save(expired)
+    slot = _slot()
+    await FirestoreLessonSlotRepository(service._fs).save(slot)
+    with pytest.raises(QuotaExhaustedError):
+        await service.book(user=user, slot_id=str(slot.id))
+```
+
+> If `_quota` doesn't expose `granted_at`/`expires_at` as mutable attributes (it returns a `MonthlyQuota` dataclass — it does), set them after construction as shown.
+
+- [ ] **Step 3: Run — expect failure**
+
+Run: `cd backend && FIRESTORE_EMULATOR_HOST=localhost:8080 uv run pytest tests/services/test_booking_service.py -v -k "fifo or skips_expired"`
 Expected: FAIL (still decrements legacy single doc / `consumed_quota_doc_id` is None).
 
-- [ ] **Step 3: Rewrite the non-trial quota block in `book`**
+- [ ] **Step 4: Rewrite the non-trial quota block in `book`**
 
 In `backend/app/services/booking_service.py` `book`, replace the non-trial branch (currently the `else:` computing `year_month` + `quota_ref` + `used+1`) with a FIFO scan. Inside the `@fs.async_transactional txn`, after the trial `if`:
 
@@ -610,14 +654,16 @@ Then where the `Booking(...)` is constructed in `book`, pass `consumed_quota_doc
             )
 ```
 
-(For the trial branch, `consumed_doc_id` is unset — guard by initializing `consumed_doc_id: str | None = None` before the `if slot.lesson_type == LessonType.TRIAL:`.)
+Initialize `consumed_doc_id: str | None = None` immediately before the `if slot.lesson_type == LessonType.TRIAL:` so the trial branch leaves it `None`.
 
-- [ ] **Step 4: Run — expect pass**
+> **Intentional duplication note (do not "fix"):** the in-transaction FIFO scan here duplicates the `expires_at > now and used < granted` + `granted_at` sort predicate that `find_active_for_user` (Task 2) also implements. This is deliberate: `find_active_for_user` is NOT transaction-aware (no `transaction=` param), and the booking decrement MUST happen inside the Firestore async transaction for race-safety. Keep both; if the predicate changes, change both.
+
+- [ ] **Step 5: Run — expect pass**
 
 Run: `cd backend && FIRESTORE_EMULATOR_HOST=localhost:8080 uv run pytest tests/services/test_booking_service.py -v`
-Expected: all green (new FIFO + existing book/cancel tests; some existing tests that pre-seeded `{uid}_{YYYY-MM}` single docs may need their fixtures updated to use `qrepo.save` which now writes the new id — update those, do not weaken assertions).
+Expected: all green — the 4 rewritten assertions (Step 1) + 2 new FIFO tests (Step 2) + all untouched book tests. `cancel`-refund tests still fail until Task 5 (they call `service.cancel` whose refund still uses the legacy ref) — specifically `test_cancel_more_than_24h_refunds_quota` and `test_cancel_trial_does_not_touch_quota` may still fail here; that is expected, Task 5 closes them. Gate THIS task on: `-k "fifo or skips_expired or test_book_increments_used or rejects_when"` all green.
 
-- [ ] **Step 5: Ruff + mypy + commit**
+- [ ] **Step 6: Ruff + mypy + commit**
 
 Run: `cd backend && uv run ruff check app/services/booking_service.py tests/services/test_booking_service.py && uv run mypy app/services`
 Expected: clean.
@@ -951,39 +997,38 @@ git commit -m "feat(mypage): ProfileCard shows aggregate quota balance"
 - Modify: `terraform/modules/cloud-function-monthly-quota-grant/source/main.py`
 - Test: `terraform/modules/cloud-function-monthly-quota-grant/source/test_main.py`
 
-- [ ] **Step 1: Write failing tests**
+- [ ] **Step 1: Update `test_main.py` — remove the deleted symbol, add new tests**
 
-Append to `terraform/modules/cloud-function-monthly-quota-grant/source/test_main.py`:
+The current `test_main.py` has `from main import (JST, QUOTA_BY_PLAN, build_quota_payload, next_month_first_jst)` (lines 7-12) and `test_next_month_first_jst_handles_month_rollover` (lines 31+). Task 9 deletes `next_month_first_jst` from `main.py`, so the import would raise `ImportError` and the whole file fails to collect.
+
+Edit `terraform/modules/cloud-function-monthly-quota-grant/source/test_main.py`:
+1. Remove `next_month_first_jst` from the `from main import (...)` block; add `add_two_months_local`.
+2. **Delete** the entire `test_next_month_first_jst_handles_month_rollover` function.
+3. Keep `test_quota_by_plan_constants` and `test_build_quota_payload_for_standard` (their target `build_quota_payload` keeps the same signature).
+4. Append:
 
 ```python
-from datetime import datetime
-from zoneinfo import ZoneInfo
-from main import add_two_months_local, build_quota_payload
-
-JST = ZoneInfo("Asia/Tokyo")
-
-
 def test_add_two_months_local_jan31():
+    from datetime import datetime
     assert add_two_months_local(datetime(2026, 1, 31, tzinfo=JST)) == datetime(
         2026, 3, 31, tzinfo=JST
     )
 
 
-def test_build_payload_expires_two_months():
-    from datetime import UTC
-    now = datetime(2026, 5, 15, 0, 0, tzinfo=UTC)
+def test_build_payload_expires_two_months_not_next_first():
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    now = datetime(2026, 5, 15, 0, 0, tzinfo=ZoneInfo("UTC"))
     p = build_quota_payload(uid="u1", plan="light", now_utc=now)
-    # expires ~2 months out, not next-month-1st
-    assert p["expires_at"] > now
     assert p["granted"] == 4
+    # 2-month expiry → strictly later than the old next-month-1st (2026-06-01)
+    assert p["expires_at"] > datetime(2026, 6, 2, tzinfo=ZoneInfo("UTC"))
 ```
-
-(Keep any existing test_main.py tests; only add.)
 
 - [ ] **Step 2: Run — expect failure**
 
-Run: `cd terraform/modules/cloud-function-monthly-quota-grant/source && python -m pytest test_main.py -v -k "add_two_months or two_months"`
-Expected: FAIL — `ImportError: add_two_months_local`.
+Run: `cd terraform/modules/cloud-function-monthly-quota-grant/source && python -m pytest test_main.py -v`
+Expected: FAIL — `ImportError: cannot import name 'add_two_months_local'` (test file now imports it; `main.py` not yet rewritten).
 
 - [ ] **Step 3: Rewrite the function source**
 
@@ -1086,7 +1131,7 @@ def grant_monthly_quota(event: Any, context: Any) -> None:
 
 - [ ] **Step 4: Add Firestore composite index**
 
-Edit `firestore.indexes.json` (repo root) — add to `indexes`:
+`firestore.indexes.json` already exists at repo root (created in sub-project 4d, has a `users` single-field block + `fieldOverrides: []`). **Merge** this object into the existing `indexes` array (do not overwrite the file, do not duplicate existing entries):
 
 ```json
 {
@@ -1229,7 +1274,7 @@ git commit -m "chore(scripts): one-shot legacy->multidoc quota migration (write-
 - [ ] **Step 1: Full backend suite**
 
 Run: `cd backend && FIRESTORE_EMULATOR_HOST=localhost:8080 uv run pytest -q`
-Expected: all new green; pre-existing `TestPhoneRoundTrip::test_phone_is_persisted` failure (known, unrelated) may remain — note it, don't fix here.
+Expected: all new + all rewritten (Task 4/5) green. Only known pre-existing failure that may remain: `tests/infrastructure/repositories/test_firestore_user_repository.py::TestPhoneRoundTrip::test_phone_is_persisted` (phone E.164 normalisation, reproducible on origin/main, unrelated). If ANY `test_booking_service.py` quota/cancel test fails, a Task 4/5 assertion rewrite was missed — fix before proceeding, do not push.
 
 - [ ] **Step 2: Cloud Function tests**
 
@@ -1294,7 +1339,7 @@ EOF
 | admin_force_book FIFO + warn-when-none | 6 |
 | `/users/me` quota_summary 集計 (I3) | 7 |
 | frontend MeResponse/ProfileCard 追従 | 8 |
-| 4b cron 新スキーム移行 + 月次冪等 (D2) | 9 |
+| 4b cron 新スキーム移行 + 月次冪等 (D2) — `next_month_first_jst` 削除に伴い test_main.py の import + 該当 test も削除/置換 | 9 |
 | backfill script, overwrite, write-freeze 前提 (D4, IMPORTANT-2) | 10 |
 | contention 増は許容 (IMPORTANT-1) | noted in 4 (txn FIFO scan) |
 | year_month = grant 月メタ (I1) | preserved in 2/9 `_to_dict` |

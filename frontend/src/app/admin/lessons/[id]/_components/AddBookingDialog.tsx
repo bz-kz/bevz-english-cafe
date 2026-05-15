@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { adminForceBook, type AdminUserSummary } from '@/lib/admin-booking';
+import { getAdminErrorMessage } from '@/lib/admin-errors';
 import { useNotificationStore } from '@/stores/notificationStore';
 import { AdminUserPicker } from './AdminUserPicker';
 
@@ -37,11 +38,7 @@ export function AddBookingDialog({
       notify.success('予約を追加しました');
       onSuccess();
     } catch (e: unknown) {
-      const msg =
-        typeof e === 'object' && e !== null && 'message' in e
-          ? String((e as { message: unknown }).message)
-          : '予約追加に失敗しました';
-      notify.error(msg);
+      notify.error(getAdminErrorMessage(e, '予約追加に失敗しました'));
     } finally {
       setBusy(false);
     }

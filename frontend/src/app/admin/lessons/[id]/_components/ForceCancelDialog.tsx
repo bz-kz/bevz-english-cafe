@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { adminForceCancel } from '@/lib/admin-booking';
+import { getAdminErrorMessage } from '@/lib/admin-errors';
 import { useNotificationStore } from '@/stores/notificationStore';
 
 interface Props {
@@ -34,8 +35,8 @@ export function ForceCancelDialog({
       });
       notify.success('予約を取消しました');
       onSuccess();
-    } catch {
-      notify.error('キャンセルに失敗しました');
+    } catch (e: unknown) {
+      notify.error(getAdminErrorMessage(e, 'キャンセルに失敗しました'));
     } finally {
       setBusy(false);
     }

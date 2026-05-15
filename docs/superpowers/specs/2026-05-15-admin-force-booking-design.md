@@ -133,9 +133,8 @@ async def admin_force_book(
 - booking doc 作成 (status=CONFIRMED)
 - `consume_trial=true` + trial 枠 → `user.trial_used = true`
 - `consume_quota=true` + 非 trial:
-  - quota doc 存在: `used += 1`
-  - quota doc 不在: `granted=0, used=1` で create
-  - 上限 (used > granted) 許容
+  - quota doc 存在: `used += 1` (上限 `used > granted` 許容)
+  - quota doc 不在: warning log のみ、quota は触らない (booking 自体は成功)
 
 ### `BookingService.admin_force_cancel`
 
@@ -218,13 +217,16 @@ async def list_all(self, *, limit: int = 50) -> list[User]:
 | `frontend/src/app/admin/lessons/[id]/_components/AdminUserPicker.tsx` | combo-box (debounce search + arrow nav) |
 | `frontend/src/lib/admin-booking.ts` | `searchAdminUsers`, `adminForceBook`, `adminForceCancel` |
 
-### Trial 枠時のチェックボックス表示
+### Lesson type 別のチェックボックス表示 (mutually exclusive)
 
-slot.lesson_type が `trial` の場合のみ:
-- AddBookingDialog: 「☐ trial を消費する」表示
-- ForceCancelDialog: 「☐ trial を返却する」表示
+- `slot.lesson_type === 'trial'`:
+  - AddBookingDialog: 「☐ trial を消費する」のみ表示 (quota チェックボックスは非表示)
+  - ForceCancelDialog: 「☐ trial を返却する」のみ表示
+- それ以外 (`group`, `private`, など):
+  - AddBookingDialog: 「☐ quota を消費する」のみ表示
+  - ForceCancelDialog: 「☐ quota を返却する」のみ表示
 
-それ以外の lesson_type では「☐ quota を消費する/返却する」のみ。
+API body には常に両フラグを乗せる (`consume_quota` / `consume_trial`, `refund_quota` / `refund_trial`)。non-trial 枠で `consume_trial=true` が来ても backend は no-op (lesson_type 判定で分岐済み)。
 
 ### UX 詳細
 

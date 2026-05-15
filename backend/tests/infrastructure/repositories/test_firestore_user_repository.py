@@ -82,6 +82,9 @@ class TestFindByEmail:
 
 class TestPhoneRoundTrip:
     async def test_phone_is_persisted(self, repo) -> None:
+        # Phone VO normalises +81 国際表記 to the 0-prefixed domestic form
+        # (see Phone._normalize_phone). The round-trip must preserve the
+        # normalised value, not the raw input.
         await repo.save(
             User(
                 uid="u1",
@@ -92,7 +95,7 @@ class TestPhoneRoundTrip:
         )
         u = await repo.find_by_uid("u1")
         assert u is not None and u.phone is not None
-        assert u.phone.value == "+819012345678"
+        assert u.phone.value == "09012345678"
 
     async def test_no_phone_is_persisted_as_none(self, repo) -> None:
         await repo.save(User(uid="u1", email="a@b.com", name="Alice"))

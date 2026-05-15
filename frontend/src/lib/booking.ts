@@ -149,10 +149,9 @@ export async function adminDeleteSlot(
 
 export type Plan = 'light' | 'standard' | 'intensive';
 
-export interface MonthQuotaSummary {
-  granted: number;
-  used: number;
-  remaining: number;
+export interface QuotaSummary {
+  total_remaining: number;
+  next_expiry: string | null;
 }
 
 export interface MeResponse {
@@ -162,7 +161,7 @@ export interface MeResponse {
   phone: string | null;
   plan: Plan | null;
   trial_used: boolean;
-  current_month_quota: MonthQuotaSummary | null;
+  quota_summary: QuotaSummary | null;
   created_at: string;
   updated_at: string;
 }

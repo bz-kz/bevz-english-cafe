@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 from uuid import uuid4
@@ -43,13 +44,11 @@ from app.services.booking_errors import (
 JST = ZoneInfo("Asia/Tokyo")
 CANCEL_DEADLINE = timedelta(hours=24)
 
+logger = logging.getLogger(__name__)
+
 
 def _utc_now() -> datetime:
     return datetime.now(UTC)
-
-
-def _jst_year_month(dt: datetime) -> str:
-    return dt.astimezone(JST).strftime("%Y-%m")
 
 
 class BookingService:
@@ -109,24 +108,34 @@ class BookingService:
                 raise NoActiveQuotaError(f"User {user.uid} not initialized")
             user_data = cast(dict[str, Any], user_snap.to_dict())
 
+            consumed_doc_id: str | None = None
             if slot.lesson_type == LessonType.TRIAL:
                 if user_data.get("trial_used", False):
                     raise TrialAlreadyUsedError(user.uid)
                 tx.update(user_ref, {"trial_used": True, "updated_at": _utc_now()})
             else:
-                year_month = _jst_year_month(_utc_now())
-                quota_ref = self._fs.collection("monthly_quota").document(
-                    f"{user.uid}_{year_month}"
+                quota_docs: list[tuple[Any, dict[str, Any]]] = []
+                q = self._fs.collection("monthly_quota").where(
+                    "user_id", "==", user.uid
                 )
-                quota_snap = await quota_ref.get(transaction=tx)
-                if not quota_snap.exists:
-                    raise NoActiveQuotaError(year_month)
-                quota_data = cast(dict[str, Any], quota_snap.to_dict())
-                granted = int(quota_data["granted"])
-                used = int(quota_data["used"])
-                if used >= granted:
-                    raise QuotaExhaustedError(year_month)
-                tx.update(quota_ref, {"used": used + 1})
+                async for qd in q.stream(transaction=tx):
+                    quota_docs.append(
+                        (qd.reference, cast(dict[str, Any], qd.to_dict()))
+                    )
+                now = _utc_now()
+                active = [
+                    (ref, d)
+                    for ref, d in quota_docs
+                    if d["expires_at"] > now and int(d["used"]) < int(d["granted"])
+                ]
+                if not quota_docs:
+                    raise NoActiveQuotaError(user.uid)
+                if not active:
+                    raise QuotaExhaustedError(user.uid)
+                active.sort(key=lambda rd: rd[1]["granted_at"])
+                chosen_ref, chosen = active[0]
+                consumed_doc_id = chosen_ref.id
+                tx.update(chosen_ref, {"used": int(chosen["used"]) + 1})
 
             booking = Booking(
                 id=new_booking_id,
@@ -135,6 +144,9 @@ class BookingService:
                 status=BookingStatus.CONFIRMED,
                 created_at=_utc_now(),
                 cancelled_at=None,
+                consumed_quota_doc_id=(
+                    None if slot.lesson_type == LessonType.TRIAL else consumed_doc_id
+                ),
             )
             tx.update(
                 slot_ref,
@@ -192,16 +204,35 @@ class BookingService:
             if not user_snap.exists:
                 raise UserNotFoundError(user_id)
 
-            quota_ref = None
-            quota_used: int | None = None
+            chosen_ref = None
+            chosen_used: int | None = None
+            consumed_doc_id: str | None = None
             if consume_quota and slot.lesson_type != LessonType.TRIAL:
-                ym = _jst_year_month(_utc_now())
-                quota_ref = self._fs.collection("monthly_quota").document(
-                    f"{user_id}_{ym}"
-                )
-                q_snap = await quota_ref.get(transaction=tx)
-                if q_snap.exists:
-                    quota_used = int(cast(dict[str, Any], q_snap.to_dict())["used"])
+                quota_docs: list[tuple[Any, dict[str, Any]]] = []
+                q = self._fs.collection("monthly_quota").where("user_id", "==", user_id)
+                async for qd in q.stream(transaction=tx):
+                    quota_docs.append(
+                        (qd.reference, cast(dict[str, Any], qd.to_dict()))
+                    )
+                now = _utc_now()
+                active = [
+                    (ref, d)
+                    for ref, d in quota_docs
+                    if d["expires_at"] > now and int(d["used"]) < int(d["granted"])
+                ]
+                if not active:
+                    # 4d contract: admin override never blocks on quota —
+                    # warn and proceed without a consumed doc.
+                    logger.warning(
+                        "admin_force_book: no active quota for user %s; "
+                        "proceeding without consumption",
+                        user_id,
+                    )
+                else:
+                    active.sort(key=lambda rd: rd[1]["granted_at"])
+                    chosen_ref, chosen = active[0]
+                    chosen_used = int(chosen["used"])
+                    consumed_doc_id = chosen_ref.id
 
             booking = Booking(
                 id=new_booking_id,
@@ -210,6 +241,7 @@ class BookingService:
                 status=BookingStatus.CONFIRMED,
                 created_at=_utc_now(),
                 cancelled_at=None,
+                consumed_quota_doc_id=consumed_doc_id,
             )
             tx.update(
                 slot_ref,
@@ -221,8 +253,8 @@ class BookingService:
             )
             if consume_trial and slot.lesson_type == LessonType.TRIAL:
                 tx.update(user_ref, {"trial_used": True, "updated_at": _utc_now()})
-            if quota_ref is not None and quota_used is not None:
-                tx.update(quota_ref, {"used": quota_used + 1})
+            if chosen_ref is not None and chosen_used is not None:
+                tx.update(chosen_ref, {"used": chosen_used + 1})
             return booking
 
         return cast(Booking, await txn(self._fs.transaction()))
@@ -256,11 +288,12 @@ class BookingService:
             lesson_type_str = slot_data.get("lesson_type", "")
             is_trial = lesson_type_str == LessonType.TRIAL.value
 
+            # Refund the exact consumed quota doc (FIFO key). consume-less
+            # or pre-4c bookings have consumed_quota_doc_id=None → skip.
             quota_ref = None
             current_used: int | None = None
-            if refund_quota and not is_trial:
-                ym = _jst_year_month(booking.created_at)
-                quota_ref = quota_col.document(f"{booking.user_id}_{ym}")
+            if refund_quota and not is_trial and booking.consumed_quota_doc_id:
+                quota_ref = quota_col.document(booking.consumed_quota_doc_id)
                 q_snap = await quota_ref.get(transaction=tx)
                 if q_snap.exists:
                     current_used = int(cast(dict[str, Any], q_snap.to_dict())["used"])
@@ -318,22 +351,20 @@ class BookingService:
             slot_snap = await slot_ref.get(transaction=tx)
             slot_data = slot_snap.to_dict() or {}
             slot_start = slot_data.get("start_at")
-            lesson_type_str = slot_data.get("lesson_type", "")
 
             # 24h rule: refuse if booking is too close to start.
             if slot_start is not None and (slot_start - _utc_now()) < CANCEL_DEADLINE:
                 raise CancelDeadlinePassedError(booking_id)
 
-            # Refund quota: read first (still in read-phase) for non-trial bookings.
+            # Refund the exact consumed quota doc (FIFO key). Pre-4c bookings
+            # have consumed_quota_doc_id=None → skip refund entirely.
             quota_ref = None
             current_used: int | None = None
-            if lesson_type_str != LessonType.TRIAL.value:
-                ym = _jst_year_month(booking.created_at)
-                quota_ref = quota_col.document(f"{user.uid}_{ym}")
+            if booking.consumed_quota_doc_id:
+                quota_ref = quota_col.document(booking.consumed_quota_doc_id)
                 q_snap = await quota_ref.get(transaction=tx)
                 if q_snap.exists:
-                    q_data = cast(dict[str, Any], q_snap.to_dict())
-                    current_used = int(q_data["used"])
+                    current_used = int(cast(dict[str, Any], q_snap.to_dict())["used"])
 
             # ---- write phase ----
             if slot_snap.exists:

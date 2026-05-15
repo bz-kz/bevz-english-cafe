@@ -17,6 +17,7 @@ class Booking:
     status: BookingStatus
     created_at: datetime
     cancelled_at: datetime | None
+    consumed_quota_doc_id: str | None = None
 
     def __post_init__(self) -> None:
         if not self.slot_id:

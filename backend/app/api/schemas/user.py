@@ -26,10 +26,9 @@ class UserUpdate(BaseModel):
     phone: str | None = Field(default=None, max_length=20)
 
 
-class MonthQuotaSummary(BaseModel):
-    granted: int
-    used: int
-    remaining: int
+class QuotaSummary(BaseModel):
+    total_remaining: int
+    next_expiry: datetime | None = None
 
 
 class UserResponse(BaseModel):
@@ -39,7 +38,7 @@ class UserResponse(BaseModel):
     phone: str | None
     plan: Literal["light", "standard", "intensive"] | None = None
     trial_used: bool = False
-    current_month_quota: MonthQuotaSummary | None = None
+    quota_summary: QuotaSummary | None = None
     created_at: datetime
     updated_at: datetime
 

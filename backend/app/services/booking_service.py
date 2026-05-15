@@ -269,11 +269,12 @@ class BookingService:
             lesson_type_str = slot_data.get("lesson_type", "")
             is_trial = lesson_type_str == LessonType.TRIAL.value
 
+            # Refund the exact consumed quota doc (FIFO key). consume-less
+            # or pre-4c bookings have consumed_quota_doc_id=None → skip.
             quota_ref = None
             current_used: int | None = None
-            if refund_quota and not is_trial:
-                ym = _jst_year_month(booking.created_at)
-                quota_ref = quota_col.document(f"{booking.user_id}_{ym}")
+            if refund_quota and not is_trial and booking.consumed_quota_doc_id:
+                quota_ref = quota_col.document(booking.consumed_quota_doc_id)
                 q_snap = await quota_ref.get(transaction=tx)
                 if q_snap.exists:
                     current_used = int(cast(dict[str, Any], q_snap.to_dict())["used"])
@@ -331,22 +332,20 @@ class BookingService:
             slot_snap = await slot_ref.get(transaction=tx)
             slot_data = slot_snap.to_dict() or {}
             slot_start = slot_data.get("start_at")
-            lesson_type_str = slot_data.get("lesson_type", "")
 
             # 24h rule: refuse if booking is too close to start.
             if slot_start is not None and (slot_start - _utc_now()) < CANCEL_DEADLINE:
                 raise CancelDeadlinePassedError(booking_id)
 
-            # Refund quota: read first (still in read-phase) for non-trial bookings.
+            # Refund the exact consumed quota doc (FIFO key). Pre-4c bookings
+            # have consumed_quota_doc_id=None → skip refund entirely.
             quota_ref = None
             current_used: int | None = None
-            if lesson_type_str != LessonType.TRIAL.value:
-                ym = _jst_year_month(booking.created_at)
-                quota_ref = quota_col.document(f"{user.uid}_{ym}")
+            if booking.consumed_quota_doc_id:
+                quota_ref = quota_col.document(booking.consumed_quota_doc_id)
                 q_snap = await quota_ref.get(transaction=tx)
                 if q_snap.exists:
-                    q_data = cast(dict[str, Any], q_snap.to_dict())
-                    current_used = int(q_data["used"])
+                    current_used = int(cast(dict[str, Any], q_snap.to_dict())["used"])
 
             # ---- write phase ----
             if slot_snap.exists:

@@ -13,6 +13,7 @@ if not os.environ.get("FIRESTORE_EMULATOR_HOST"):
 
 from google.cloud import firestore as fs  # noqa: E402
 
+from app.domain.entities.monthly_quota import MonthlyQuota  # noqa: E402
 from app.domain.enums.contact import LessonType
 from app.domain.enums.lesson_booking import BookingStatus, SlotStatus
 from app.infrastructure.repositories.firestore_booking_repository import (
@@ -113,6 +114,24 @@ async def _make_user(
     )
 
 
+async def _seed_active_quota(
+    client, *, uid="u1", granted=4, used=0, granted_at=None, expires_at=None
+) -> str:
+    """Persist an active (multi-doc scheme) quota via the repo; return doc id."""
+    ga = granted_at or (_now() - timedelta(days=1))
+    q = MonthlyQuota(
+        user_id=uid,
+        year_month=ga.astimezone().strftime("%Y-%m"),
+        plan_at_grant="light",
+        granted=granted,
+        used=used,
+        granted_at=ga,
+        expires_at=expires_at or (_now() + timedelta(days=30)),
+    )
+    await FirestoreMonthlyQuotaRepository(client).save(q)
+    return f"{uid}_{ga.strftime('%Y%m%d%H%M%S%f')}"
+
+
 async def test_force_book_happy_path_no_quota(service, firestore_client):
     slot_id = await _make_slot(firestore_client)
     await _make_user(firestore_client)
@@ -206,30 +225,21 @@ async def test_force_book_consume_quota_when_doc_missing_skips(
     assert booking.status == BookingStatus.CONFIRMED
 
 
-async def test_force_book_consume_quota_allows_overuse(service, firestore_client):
+async def test_force_book_consume_quota_exhausted_warns_and_succeeds(
+    service, firestore_client
+):
+    # exhausted-only doc is not active under FIFO → warn + proceed,
+    # booking succeeds, no consumed id, exhausted doc untouched.
     slot_id = await _make_slot(firestore_client)
     await _make_user(firestore_client)
-    from zoneinfo import ZoneInfo
-
-    ym = datetime.now(ZoneInfo("Asia/Tokyo")).strftime("%Y-%m")
-    await (
-        firestore_client.collection("monthly_quota")
-        .document(f"u1_{ym}")
-        .set(
-            {
-                "user_id": "u1",
-                "year_month": ym,
-                "granted": 4,
-                "used": 4,
-                "granted_at": _now(),
-            }
-        )
-    )
-    await service.admin_force_book(
+    doc_id = await _seed_active_quota(firestore_client, uid="u1", granted=4, used=4)
+    booking = await service.admin_force_book(
         slot_id=slot_id, user_id="u1", consume_quota=True, consume_trial=False
     )
-    snap = await firestore_client.collection("monthly_quota").document(f"u1_{ym}").get()
-    assert snap.to_dict()["used"] == 5  # used > granted 許容
+    assert booking.status == BookingStatus.CONFIRMED
+    assert booking.consumed_quota_doc_id is None
+    snap = await firestore_client.collection("monthly_quota").document(doc_id).get()
+    assert snap.to_dict()["used"] == 4  # untouched
 
 
 async def test_force_cancel_happy_path(service, firestore_client):
@@ -278,30 +288,16 @@ async def test_force_cancel_idempotent(service, firestore_client):
 async def test_force_cancel_refund_quota(service, firestore_client):
     slot_id = await _make_slot(firestore_client)
     await _make_user(firestore_client)
-    from zoneinfo import ZoneInfo
-
-    ym = datetime.now(ZoneInfo("Asia/Tokyo")).strftime("%Y-%m")
-    await (
-        firestore_client.collection("monthly_quota")
-        .document(f"u1_{ym}")
-        .set(
-            {
-                "user_id": "u1",
-                "year_month": ym,
-                "granted": 4,
-                "used": 1,
-                "granted_at": _now(),
-            }
-        )
-    )
+    doc_id = await _seed_active_quota(firestore_client, uid="u1", granted=4, used=1)
     booking = await service.admin_force_book(
-        slot_id=slot_id, user_id="u1", consume_quota=False, consume_trial=False
+        slot_id=slot_id, user_id="u1", consume_quota=True, consume_trial=False
     )
+    assert booking.consumed_quota_doc_id == doc_id
     await service.admin_force_cancel(
         booking_id=str(booking.id), refund_quota=True, refund_trial=False
     )
-    snap = await firestore_client.collection("monthly_quota").document(f"u1_{ym}").get()
-    assert snap.to_dict()["used"] == 0
+    snap = await firestore_client.collection("monthly_quota").document(doc_id).get()
+    assert snap.to_dict()["used"] == 1  # back to pre-force-book level
 
 
 async def test_force_cancel_refund_trial(service, firestore_client):
@@ -315,3 +311,26 @@ async def test_force_cancel_refund_trial(service, firestore_client):
     )
     snap = await firestore_client.collection("users").document("u1").get()
     assert snap.to_dict()["trial_used"] is False
+
+
+async def test_admin_force_cancel_refund_uses_consumed_doc(service, firestore_client):
+    # admin_force_book(consume_quota=True) records consumed id;
+    # admin_force_cancel(refund_quota=True) increments that doc back
+    slot_id = await _make_slot(firestore_client)
+    await _make_user(firestore_client)
+    doc_id = await _seed_active_quota(firestore_client, uid="u1", granted=4, used=0)
+    booking = await service.admin_force_book(
+        slot_id=slot_id, user_id="u1", consume_quota=True, consume_trial=False
+    )
+    assert booking.consumed_quota_doc_id == doc_id
+    after_book = (
+        await firestore_client.collection("monthly_quota").document(doc_id).get()
+    )
+    assert after_book.to_dict()["used"] == 1
+    await service.admin_force_cancel(
+        booking_id=str(booking.id), refund_quota=True, refund_trial=False
+    )
+    after_cancel = (
+        await firestore_client.collection("monthly_quota").document(doc_id).get()
+    )
+    assert after_cancel.to_dict()["used"] == 0

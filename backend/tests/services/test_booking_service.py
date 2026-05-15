@@ -16,6 +16,7 @@ if not os.environ.get("FIRESTORE_EMULATOR_HOST"):
 
 from google.cloud import firestore as fs  # noqa: E402
 
+from app.domain.entities.booking import Booking
 from app.domain.entities.lesson_slot import LessonSlot
 from app.domain.entities.monthly_quota import MonthlyQuota
 from app.domain.entities.user import User
@@ -356,3 +357,51 @@ async def test_book_skips_expired_quota_raises_exhausted(
     await FirestoreLessonSlotRepository(service._fs).save(slot)
     with pytest.raises(QuotaExhaustedError):
         await service.book(user=user, slot_id=str(slot.id))
+
+
+async def test_cancel_refunds_consumed_quota_doc(service, quota_repo, user_repo):
+    # book consumes a doc, cancel must increment that exact doc back
+    user = await _persist_user(user_repo, uid="u-cr1", plan=Plan.LIGHT)
+    q = _quota(user_id=user.uid, granted=4, used=0)
+    await quota_repo.save(q)
+    far_slot = _slot(start_offset_hours=72)
+    await FirestoreLessonSlotRepository(service._fs).save(far_slot)
+    booking = await service.book(user=user, slot_id=str(far_slot.id))
+    assert booking.consumed_quota_doc_id is not None
+    consumed = await quota_repo.find_by_doc_id(booking.consumed_quota_doc_id)
+    assert consumed is not None and consumed.used == 1
+    await service.cancel(user=user, booking_id=str(booking.id))
+    refunded = await quota_repo.find_by_doc_id(booking.consumed_quota_doc_id)
+    assert refunded is not None and refunded.used == 0
+
+
+async def test_cancel_pre4c_booking_without_consumed_id_skips_refund(
+    service, quota_repo, user_repo
+):
+    # craft a Booking saved with consumed_quota_doc_id=None, cancel must
+    # not raise and must not touch any quota doc
+    user = await _persist_user(user_repo, uid="u-cr2", plan=Plan.LIGHT)
+    q = _quota(user_id=user.uid, granted=4, used=2)
+    saved_doc_id = f"{user.uid}_{q.granted_at.strftime('%Y%m%d%H%M%S%f')}"
+    await quota_repo.save(q)
+    far_slot = _slot(start_offset_hours=72)
+    await FirestoreLessonSlotRepository(service._fs).save(far_slot)
+    legacy_booking = Booking(
+        id=uuid4(),
+        slot_id=str(far_slot.id),
+        user_id=user.uid,
+        status=BookingStatus.CONFIRMED,
+        created_at=datetime.now(UTC),
+        cancelled_at=None,
+        consumed_quota_doc_id=None,
+    )
+    await service._booking_repo.save(legacy_booking)
+    await (
+        service._fs.collection("lesson_slots")
+        .document(str(far_slot.id))
+        .update({"booked_count": 1})
+    )
+    result = await service.cancel(user=user, booking_id=str(legacy_booking.id))
+    assert result.status == BookingStatus.CANCELLED
+    untouched = await quota_repo.find_by_doc_id(saved_doc_id)
+    assert untouched is not None and untouched.used == 2  # no refund applied

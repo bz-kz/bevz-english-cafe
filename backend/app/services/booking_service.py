@@ -227,6 +227,73 @@ class BookingService:
 
         return cast(Booking, await txn(self._fs.transaction()))
 
+    async def admin_force_cancel(
+        self,
+        *,
+        booking_id: str,
+        refund_quota: bool,
+        refund_trial: bool,
+    ) -> Booking:
+        """Admin による強制キャンセル。24h ルール bypass。"""
+        booking_ref = self._fs.collection("bookings").document(booking_id)
+        slots_col = self._fs.collection("lesson_slots")
+        quota_col = self._fs.collection("monthly_quota")
+        users_col = self._fs.collection("users")
+
+        @fs.async_transactional
+        async def txn(tx):  # type: ignore[no-untyped-def]
+            booking_snap = await booking_ref.get(transaction=tx)
+            if not booking_snap.exists:
+                raise BookingNotFoundError(booking_id)
+            booking = self._booking_repo._from_dict(booking_snap.to_dict(), booking_id)
+
+            if booking.status == BookingStatus.CANCELLED:
+                return booking
+
+            slot_ref = slots_col.document(booking.slot_id)
+            slot_snap = await slot_ref.get(transaction=tx)
+            slot_data = slot_snap.to_dict() or {}
+            lesson_type_str = slot_data.get("lesson_type", "")
+            is_trial = lesson_type_str == LessonType.TRIAL.value
+
+            quota_ref = None
+            current_used: int | None = None
+            if refund_quota and not is_trial:
+                ym = _jst_year_month(booking.created_at)
+                quota_ref = quota_col.document(f"{booking.user_id}_{ym}")
+                q_snap = await quota_ref.get(transaction=tx)
+                if q_snap.exists:
+                    current_used = int(cast(dict[str, Any], q_snap.to_dict())["used"])
+
+            user_ref = None
+            if refund_trial and is_trial:
+                user_ref = users_col.document(booking.user_id)
+                # 読みは不要(上書き)だが transaction の read-before-write 規約のため空 read
+                await user_ref.get(transaction=tx)
+
+            # ---- write phase ----
+            if slot_snap.exists:
+                current = int(slot_data["booked_count"])
+                tx.update(
+                    slot_ref,
+                    {"booked_count": max(0, current - 1), "updated_at": _utc_now()},
+                )
+            if quota_ref is not None and current_used is not None:
+                tx.update(quota_ref, {"used": max(0, current_used - 1)})
+            if user_ref is not None:
+                tx.update(user_ref, {"trial_used": False, "updated_at": _utc_now()})
+
+            now = _utc_now()
+            booking.status = BookingStatus.CANCELLED
+            booking.cancelled_at = now
+            tx.update(
+                booking_ref,
+                {"status": BookingStatus.CANCELLED.value, "cancelled_at": now},
+            )
+            return booking
+
+        return cast(Booking, await txn(self._fs.transaction()))
+
     async def cancel(self, *, user: User, booking_id: str) -> Booking:
         booking_ref = self._fs.collection("bookings").document(booking_id)
         slots_col = self._fs.collection("lesson_slots")

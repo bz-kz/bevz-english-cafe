@@ -230,3 +230,88 @@ async def test_force_book_consume_quota_allows_overuse(service, firestore_client
     )
     snap = await firestore_client.collection("monthly_quota").document(f"u1_{ym}").get()
     assert snap.to_dict()["used"] == 5  # used > granted 許容
+
+
+async def test_force_cancel_happy_path(service, firestore_client):
+    slot_id = await _make_slot(firestore_client)
+    await _make_user(firestore_client)
+    booking = await service.admin_force_book(
+        slot_id=slot_id, user_id="u1", consume_quota=False, consume_trial=False
+    )
+    cancelled = await service.admin_force_cancel(
+        booking_id=str(booking.id), refund_quota=False, refund_trial=False
+    )
+    assert cancelled.status == BookingStatus.CANCELLED
+    snap = await firestore_client.collection("lesson_slots").document(slot_id).get()
+    assert snap.to_dict()["booked_count"] == 0
+
+
+async def test_force_cancel_within_24h_succeeds(service, firestore_client):
+    slot_id = await _make_slot(firestore_client, start_offset_h=1)
+    await _make_user(firestore_client)
+    booking = await service.admin_force_book(
+        slot_id=slot_id, user_id="u1", consume_quota=False, consume_trial=False
+    )
+    cancelled = await service.admin_force_cancel(
+        booking_id=str(booking.id), refund_quota=False, refund_trial=False
+    )
+    assert cancelled.status == BookingStatus.CANCELLED
+
+
+async def test_force_cancel_idempotent(service, firestore_client):
+    slot_id = await _make_slot(firestore_client)
+    await _make_user(firestore_client)
+    booking = await service.admin_force_book(
+        slot_id=slot_id, user_id="u1", consume_quota=False, consume_trial=False
+    )
+    await service.admin_force_cancel(
+        booking_id=str(booking.id), refund_quota=False, refund_trial=False
+    )
+    again = await service.admin_force_cancel(
+        booking_id=str(booking.id), refund_quota=False, refund_trial=False
+    )
+    assert again.status == BookingStatus.CANCELLED
+    snap = await firestore_client.collection("lesson_slots").document(slot_id).get()
+    assert snap.to_dict()["booked_count"] == 0  # not decremented twice
+
+
+async def test_force_cancel_refund_quota(service, firestore_client):
+    slot_id = await _make_slot(firestore_client)
+    await _make_user(firestore_client)
+    from zoneinfo import ZoneInfo
+
+    ym = datetime.now(ZoneInfo("Asia/Tokyo")).strftime("%Y-%m")
+    await (
+        firestore_client.collection("monthly_quota")
+        .document(f"u1_{ym}")
+        .set(
+            {
+                "user_id": "u1",
+                "year_month": ym,
+                "granted": 4,
+                "used": 1,
+                "granted_at": _now(),
+            }
+        )
+    )
+    booking = await service.admin_force_book(
+        slot_id=slot_id, user_id="u1", consume_quota=False, consume_trial=False
+    )
+    await service.admin_force_cancel(
+        booking_id=str(booking.id), refund_quota=True, refund_trial=False
+    )
+    snap = await firestore_client.collection("monthly_quota").document(f"u1_{ym}").get()
+    assert snap.to_dict()["used"] == 0
+
+
+async def test_force_cancel_refund_trial(service, firestore_client):
+    slot_id = await _make_slot(firestore_client, lesson_type=LessonType.TRIAL)
+    await _make_user(firestore_client, trial_used=False)
+    booking = await service.admin_force_book(
+        slot_id=slot_id, user_id="u1", consume_quota=False, consume_trial=True
+    )
+    await service.admin_force_cancel(
+        booking_id=str(booking.id), refund_quota=False, refund_trial=True
+    )
+    snap = await firestore_client.collection("users").document("u1").get()
+    assert snap.to_dict()["trial_used"] is False

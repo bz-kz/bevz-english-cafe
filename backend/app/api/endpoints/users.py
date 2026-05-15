@@ -43,6 +43,10 @@ def _user_to_response(
         plan=user.plan.value if user.plan else None,
         trial_used=user.trial_used,
         quota_summary=quota_summary,
+        stripe_subscription_id=user.stripe_subscription_id,
+        subscription_status=user.subscription_status,
+        subscription_cancel_at_period_end=user.subscription_cancel_at_period_end,
+        current_period_end=user.current_period_end,
         created_at=user.created_at,
         updated_at=user.updated_at,
     )

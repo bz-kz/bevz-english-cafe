@@ -39,6 +39,10 @@ class UserResponse(BaseModel):
     plan: Literal["light", "standard", "intensive"] | None = None
     trial_used: bool = False
     quota_summary: QuotaSummary | None = None
+    stripe_subscription_id: str | None = None
+    subscription_status: str | None = None
+    subscription_cancel_at_period_end: bool = False
+    current_period_end: datetime | None = None
     created_at: datetime
     updated_at: datetime
 

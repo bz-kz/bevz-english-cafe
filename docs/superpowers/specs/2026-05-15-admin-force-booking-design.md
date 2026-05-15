@@ -121,7 +121,7 @@ async def admin_force_book(
 2. `slot.is_full` → `SlotFullError` (β: capacity 守る)
 3. 重複 confirmed booking 確認 → あれば `AlreadyBookedError`
 4. user fetch → 不在 → `UserNotFoundError` (新エラー)
-5. `consume_quota=true` + 非 trial: quota_ref を read (なくても続行、create する)
+5. `consume_quota=true` + 非 trial: quota_ref を read (不在時の挙動は Write phase 参照)
 
 **Skip**:
 - `SlotNotOpenError` (admin は closed 枠にも入れられる)

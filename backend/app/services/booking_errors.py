@@ -35,6 +35,10 @@ class NotBookingOwnerError(BookingError):
     """The acting user is not the booking owner."""
 
 
+class UserNotFoundError(BookingError):
+    """The target user (force-book recipient) does not exist."""
+
+
 class TrialAlreadyUsedError(Exception):
     """User has already consumed their lifetime trial booking."""
 

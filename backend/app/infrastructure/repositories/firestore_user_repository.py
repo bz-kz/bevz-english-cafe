@@ -37,6 +37,41 @@ class FirestoreUserRepository(UserRepository):
             return self._from_dict(doc.to_dict(), doc.id)
         return None
 
+    async def search(self, q: str, *, limit: int = 50) -> list[User]:
+        if not q:
+            return []
+        # prefix range trick: '' を上限 sentinel として使う
+        end = q + ""
+        found: dict[str, User] = {}
+
+        email_q = (
+            self._collection.where("email", ">=", q)
+            .where("email", "<=", end)
+            .limit(limit)
+        )
+        async for doc in email_q.stream():
+            found[doc.id] = self._from_dict(doc.to_dict(), doc.id)
+
+        name_q = (
+            self._collection.where("name", ">=", q)
+            .where("name", "<=", end)
+            .limit(limit)
+        )
+        async for doc in name_q.stream():
+            if doc.id not in found:
+                found[doc.id] = self._from_dict(doc.to_dict(), doc.id)
+
+        return list(found.values())[:limit]
+
+    async def list_all(self, *, limit: int = 50) -> list[User]:
+        q = self._collection.order_by(
+            "updated_at", direction=fs.Query.DESCENDING
+        ).limit(limit)
+        out: list[User] = []
+        async for doc in q.stream():
+            out.append(self._from_dict(doc.to_dict(), doc.id))
+        return out
+
     @staticmethod
     def _to_dict(user: User) -> dict[str, Any]:
         return {

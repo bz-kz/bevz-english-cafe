@@ -10,6 +10,8 @@ import {
 } from '@/lib/booking';
 import { firebaseAuth } from '@/lib/firebase';
 import { useNotificationStore } from '@/stores/notificationStore';
+import { AddBookingDialog } from './_components/AddBookingDialog';
+import { ForceCancelDialog } from './_components/ForceCancelDialog';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8010';
 
@@ -34,6 +36,10 @@ export default function AdminLessonEditPage() {
   const [notes, setNotes] = useState('');
   const [capacity, setCapacity] = useState(0);
   const [busy, setBusy] = useState<null | 'save' | 'close' | 'delete'>(null);
+  const [addOpen, setAddOpen] = useState(false);
+  const [cancelTarget, setCancelTarget] = useState<AdminBookingRow | null>(
+    null
+  );
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -179,7 +185,16 @@ export default function AdminLessonEditPage() {
       </div>
 
       <section>
-        <h3 className="mb-2 font-semibold">予約者</h3>
+        <div className="mb-2 flex items-center justify-between">
+          <h3 className="font-semibold">予約者</h3>
+          <button
+            type="button"
+            onClick={() => setAddOpen(true)}
+            className="rounded bg-blue-600 px-2 py-1 text-xs text-white"
+          >
+            + 予約を追加
+          </button>
+        </div>
         {bookings.length === 0 ? (
           <p className="text-sm text-gray-500">まだ予約はありません</p>
         ) : (
@@ -190,6 +205,7 @@ export default function AdminLessonEditPage() {
                 <th>メール</th>
                 <th>状態</th>
                 <th>予約日時</th>
+                <th />
               </tr>
             </thead>
             <tbody>
@@ -211,12 +227,47 @@ export default function AdminLessonEditPage() {
                     )}
                   </td>
                   <td>{new Date(b.created_at).toLocaleString('ja-JP')}</td>
+                  <td>
+                    {b.status === 'confirmed' && (
+                      <button
+                        type="button"
+                        onClick={() => setCancelTarget(b)}
+                        className="text-xs text-red-600 underline"
+                      >
+                        強制キャンセル
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
       </section>
+
+      {addOpen && (
+        <AddBookingDialog
+          slotId={slot.id}
+          lessonType={slot.lesson_type}
+          onClose={() => setAddOpen(false)}
+          onSuccess={async () => {
+            setAddOpen(false);
+            await load();
+          }}
+        />
+      )}
+      {cancelTarget && (
+        <ForceCancelDialog
+          bookingId={cancelTarget.id}
+          userLabel={cancelTarget.user_email ?? cancelTarget.user_id}
+          lessonType={slot.lesson_type}
+          onClose={() => setCancelTarget(null)}
+          onSuccess={async () => {
+            setCancelTarget(null);
+            await load();
+          }}
+        />
+      )}
     </div>
   );
 }

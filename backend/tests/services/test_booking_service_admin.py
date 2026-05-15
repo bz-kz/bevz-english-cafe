@@ -379,3 +379,29 @@ async def test_admin_force_book_consume_quota_no_docs_warns_and_succeeds(
     )
     assert booking.status == BookingStatus.CONFIRMED
     assert booking.consumed_quota_doc_id is None
+
+
+async def test_admin_force_book_consume_quota_all_expired_warns_and_succeeds(
+    service, firestore_client
+):
+    # docs exist but ALL expired (active==[] while quota_docs non-empty):
+    # warn + proceed, booking succeeds, no consumed id, expired doc untouched.
+    slot_id = await _make_slot(firestore_client)
+    await _make_user(firestore_client)
+    now = _now()
+    doc_id = await _seed_active_quota(
+        firestore_client,
+        uid="u1",
+        granted=4,
+        used=0,
+        granted_at=now - timedelta(days=90),
+        expires_at=now - timedelta(days=1),
+    )
+    booking = await service.admin_force_book(
+        slot_id=slot_id, user_id="u1", consume_quota=True, consume_trial=False
+    )
+    assert booking.status == BookingStatus.CONFIRMED
+    assert booking.consumed_quota_doc_id is None
+    quota_repo = FirestoreMonthlyQuotaRepository(firestore_client)
+    expired = await quota_repo.find_by_doc_id(doc_id)
+    assert expired is not None and expired.used == 0  # untouched

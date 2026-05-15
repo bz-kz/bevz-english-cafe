@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from datetime import UTC, datetime
 
 import pytest
 
@@ -16,6 +17,21 @@ from app.domain.value_objects.phone import Phone
 from app.infrastructure.repositories.firestore_user_repository import (
     FirestoreUserRepository,
 )
+
+
+def _user(uid: str, email: str, name: str) -> User:
+    now = datetime.now(UTC)
+    return User(
+        uid=uid,
+        email=email,
+        name=name,
+        phone=None,
+        plan=None,
+        plan_started_at=None,
+        trial_used=False,
+        created_at=now,
+        updated_at=now,
+    )
 
 
 @pytest.fixture
@@ -83,3 +99,37 @@ class TestPhoneRoundTrip:
         u = await repo.find_by_uid("u1")
         assert u is not None
         assert u.phone is None
+
+
+class TestSearch:
+    async def test_search_email_prefix(self, repo) -> None:
+        await repo.save(_user("u1", "taro@example.com", "山田太郎"))
+        await repo.save(_user("u2", "hanako@example.com", "佐藤花子"))
+        result = await repo.search("taro")
+        assert len(result) == 1
+        assert result[0].uid == "u1"
+
+    async def test_search_name_prefix(self, repo) -> None:
+        await repo.save(_user("u1", "taro@example.com", "山田太郎"))
+        await repo.save(_user("u2", "hanako@example.com", "佐藤花子"))
+        result = await repo.search("佐藤")
+        assert len(result) == 1
+        assert result[0].uid == "u2"
+
+    async def test_search_empty_query_returns_empty(self, repo) -> None:
+        await repo.save(_user("u1", "taro@example.com", "山田太郎"))
+        assert await repo.search("") == []
+
+
+class TestListAll:
+    async def test_list_all_returns_users(self, repo) -> None:
+        await repo.save(_user("u1", "taro@example.com", "山田太郎"))
+        await repo.save(_user("u2", "hanako@example.com", "佐藤花子"))
+        result = await repo.list_all(limit=10)
+        assert {u.uid for u in result} == {"u1", "u2"}
+
+    async def test_list_all_respects_limit(self, repo) -> None:
+        for i in range(5):
+            await repo.save(_user(f"u{i}", f"u{i}@example.com", f"name{i}"))
+        result = await repo.list_all(limit=2)
+        assert len(result) == 2

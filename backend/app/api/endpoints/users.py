@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import Annotated, Any
-from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
@@ -16,7 +15,7 @@ from app.api.dependencies.repositories import (
 )
 from app.api.schemas.contact import ContactResponse
 from app.api.schemas.user import (
-    MonthQuotaSummary,
+    QuotaSummary,
     UserCreate,
     UserResponse,
     UserSignupResponse,
@@ -30,13 +29,11 @@ from app.domain.repositories.user_repository import UserRepository
 from app.domain.value_objects.phone import Phone
 from app.services.user_service import UserService
 
-JST = ZoneInfo("Asia/Tokyo")
-
 router = APIRouter(prefix="/api/v1/users", tags=["users"])
 
 
 def _user_to_response(
-    user: User, quota_summary: MonthQuotaSummary | None = None
+    user: User, quota_summary: QuotaSummary | None = None
 ) -> UserResponse:
     return UserResponse(
         uid=user.uid,
@@ -45,7 +42,7 @@ def _user_to_response(
         phone=user.phone.value if user.phone else None,
         plan=user.plan.value if user.plan else None,
         trial_used=user.trial_used,
-        current_month_quota=quota_summary,
+        quota_summary=quota_summary,
         created_at=user.created_at,
         updated_at=user.updated_at,
     )
@@ -103,15 +100,15 @@ async def get_profile(
         MonthlyQuotaRepository, Depends(get_monthly_quota_repository)
     ],
 ) -> UserResponse:
-    ym = datetime.now(UTC).astimezone(JST).strftime("%Y-%m")
-    quota = await quota_repo.find(user.uid, ym)
-    summary = (
-        MonthQuotaSummary(
-            granted=quota.granted, used=quota.used, remaining=quota.remaining
+    now = datetime.now(UTC)
+    active = await quota_repo.find_active_for_user(user.uid, now)
+    if active:
+        summary: QuotaSummary | None = QuotaSummary(
+            total_remaining=sum(q.granted - q.used for q in active),
+            next_expiry=min(q.expires_at for q in active),
         )
-        if quota
-        else None
-    )
+    else:
+        summary = None
     return _user_to_response(user, summary)
 
 

@@ -106,6 +106,10 @@ consumed_quota_doc_id: str | None = None  # FIFO で減算した quota doc。tri
 
 `admin_force_book` (`consume_quota=True`, 非 trial): 上記 FIFO と同一パス。active doc 皆無なら warning log + skip (4d 既存挙動踏襲、booking 自体は成功)。
 
+**Contention 注意 (IMPORTANT-1)**: `book` は従来の単一 `.get()` から collection query (`where user_id==uid`) に変わるため、同一ユーザーの quota doc への並行書き込み (cron grant / Stripe grant / 並行 book·cancel) と transaction read-set が衝突し retry が増える。doc 数はユーザー当たり数件で bounded だが、現状比でコンテンション増は許容前提。Firestore async txn の自動 retry に委ねる。
+
+**domain interface 変更明示**: `app/domain/repositories/monthly_quota_repository.py` の抽象に `find_active_for_user` / `find_by_doc_id` を追加、`find` は deprecated コメント付与 (4c-1 内で全呼び出し置換後、4c-2 着手前に削除)。
+
 ### 4b Cloud Function 移行 (D2=a)
 
 `terraform/modules/cloud-function-monthly-quota-grant/source/main.py` を改修:
@@ -118,8 +122,11 @@ consumed_quota_doc_id: str | None = None  # FIFO で減算した quota doc。tri
 
 `scripts/migrate_quota_to_multidoc.py`:
 - 既存 `{uid}_{YYYY-MM}` パターンの doc を走査
-- 各々 `granted_at = year_month の 1 日 0:00 JST`、`expires_at = add_two_months(granted_at)` で新 doc-id に複製
-- 旧 doc は削除 (--dry-run で確認可)
+- 各々 `granted_at = year_month の 1 日 0:00 JST`、`expires_at = add_two_months(granted_at)` で新 doc-id に複製。`used` は旧 doc の値を引き継ぐ
+- 新 doc は `set` (skip-if-exists しない=部分失敗後の再実行で確実に上書き修復。`backfill_monthly_quota.py` の exists-skip パターンは踏襲しない)
+- 旧 doc は新 doc 作成成功後に削除 (--dry-run で確認可)
+- **ハード前提 (IMPORTANT-2)**: migration 中は quota への書き込みを凍結する (本番デプロイ前の maintenance window で実行、または booking 一時停止)。実行中に旧 doc へ booking が `used` 加算すると再実行時に stale 上書きで消費喪失。これは soft note でなく ops 必須手順
+- 旧 expiry (翌月1日) ではなく `add_two_months(month1st)` を付与 → 移行済み legacy doc も一律 2 ヶ月有効 (Q4: 新モデルに一本化、特例パス作らない。ユーザー有利方向で副作用なし)
 - pre-4c の booking は `consumed_quota_doc_id` を後付けしない (cancel refund は諦め: 本番未ローンチで件数僅少)
 
 ### `/users/me` quota 表示改修 (I3)
@@ -170,7 +177,14 @@ frontend: `ProfileCard` テストを新 `quota_summary` 形に更新。
 - endpoints `app/api/endpoints/billing.py`: `POST /billing/checkout`, `POST /billing/portal`, `POST /billing/webhook`
 - `User` entity 追加: `stripe_customer_id`, `stripe_subscription_id`, `subscription_status`, `subscription_cancel_at_period_end`, `current_period_end`
 - webhook idempotency (I4): `ProcessedEventRepository.create_if_absent(event_id)` を **Firestore transaction で create (既存なら例外) → 副作用** を 1 トランザクション化。並行配信で二重 grant しない
-- 二重付与回避 (D3): `invoice.paid` handler は `invoice.billing_reason == "subscription_update"` の時 grant skip。`customer.subscription.updated` が `PLAN_QUOTA[new]-PLAN_QUOTA[old]>0` の差分を 4c-1 の `MonthlyQuotaRepository.save` で grant
+- **quota grant 経路は `invoice.paid` 単一に集約 (I2 完全解消)**:
+  - `checkout.session.completed` は **customer/subscription 紐付け専用、grant しない**
+  - `invoice.paid` が全 grant を担当。`billing_reason` で分岐:
+    - `subscription_create` (初回加入) → `PLAN_QUOTA[plan]` full grant
+    - `subscription_cycle` (通常更新) → `PLAN_QUOTA[plan]` full grant
+    - `subscription_update` (proration) → **grant skip** (差分は `customer.subscription.updated` が担当)
+  - `customer.subscription.updated` は plan 更新 + `PLAN_QUOTA[new]-PLAN_QUOTA[old]>0` の差分のみ 4c-1 `MonthlyQuotaRepository.save` で grant
+  - → 初回加入で `checkout.session.completed` と `invoice.paid` が両方届いても grant は invoice.paid の 1 回だけ
 - quota grant は必ず 4c-1 の `save` (新 doc-id) を経由 — 4c-2 は doc-id スキームを知らない
 - env: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_LIGHT|STANDARD|INTENSIVE` (HCP sensitive)
 - Stripe SDK は test で mock。実 key 不要

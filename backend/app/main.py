@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .api.endpoints.admin import router as admin_router
+from .api.endpoints.billing import router as billing_router
 from .api.endpoints.bookings import router as bookings_router
 from .api.endpoints.contact import router as contact_router
 from .api.endpoints.lesson_slots import router as lesson_slots_router
@@ -109,6 +110,7 @@ app.include_router(users_router)
 app.include_router(lesson_slots_router)
 app.include_router(bookings_router)
 app.include_router(admin_router)
+app.include_router(billing_router)
 
 
 if __name__ == "__main__":

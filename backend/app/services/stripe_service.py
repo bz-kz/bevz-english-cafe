@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import UTC, datetime
 from typing import Any
 
 import stripe
@@ -16,7 +17,9 @@ from fastapi import HTTPException, status
 from google.cloud import firestore as fs
 
 from app.config import Settings
-from app.domain.enums.plan import Plan
+from app.domain.entities.monthly_quota import MonthlyQuota
+from app.domain.enums.plan import PLAN_QUOTA, Plan
+from app.domain.services.quota_expiry import add_two_months
 from app.infrastructure.repositories.firestore_monthly_quota_repository import (
     FirestoreMonthlyQuotaRepository,
 )
@@ -141,7 +144,39 @@ class StripeService:
             logger.info("ignoring stripe event %s", etype)
 
     async def _on_invoice_paid(self, event_id: str, invoice: Any) -> None:
-        raise NotImplementedError
+        # --- (txn の外) network I/O で uid/plan を確定 ---
+        resolved = await self._resolve_uid_plan(invoice)
+        if resolved is None:
+            return  # logged inside; 200 to Stripe (no retry storm)
+        uid, plan = resolved
+        now = datetime.now(UTC)
+        granted = PLAN_QUOTA[plan]
+        quota = MonthlyQuota(
+            user_id=uid,
+            year_month=now.strftime("%Y-%m"),
+            plan_at_grant=plan.value,
+            granted=granted,
+            used=0,
+            granted_at=now,
+            expires_at=add_two_months(now),
+        )
+        quota_doc_id = f"{uid}_{now.strftime('%Y%m%d%H%M%S%f')}"
+        quota_dict = self._quota._to_dict(quota)
+        pe_ref = self._fs.collection("processed_stripe_events").document(event_id)
+        quota_ref = self._fs.collection("monthly_quota").document(quota_doc_id)
+
+        @fs.async_transactional
+        async def txn(tx):  # type: ignore[no-untyped-def]
+            pe_snap = await pe_ref.get(transaction=tx)
+            if pe_snap.exists:
+                return  # exactly-once: already processed (before any write)
+            tx.set(quota_ref, quota_dict)
+            tx.set(
+                pe_ref,
+                {"event_type": "invoice.paid", "processed_at": datetime.now(UTC)},
+            )
+
+        await txn(self._fs.transaction())
 
     async def _on_checkout_completed(self, event_id: str, etype: str, obj: Any) -> None:
         uid = obj.get("client_reference_id")

@@ -139,3 +139,74 @@ async def test_checkout_completed_saves_customer_and_plan(service, client):
     # no quota granted by checkout.session.completed
     docs = [d async for d in client.collection("monthly_quota").stream()]
     assert docs == []
+
+
+def _invoice_event(eid: str, sub_id: str = "sub_p") -> dict:
+    return _event("invoice.paid", {"id": "in_1", "subscription": sub_id}, eid)
+
+
+async def test_invoice_paid_grants_full_quota(service, client):
+    await FirestoreUserRepository(client).save(
+        User(uid="ip1", email="ip1@example.com", name="Ip1")
+    )
+    sub_obj = {
+        "metadata": {"firebase_uid": "ip1"},
+        "items": {"data": [{"price": {"id": "price_light"}}]},
+    }
+    ev = _invoice_event("evt_ip1")
+    with (
+        patch("stripe.Webhook.construct_event", return_value=ev),
+        patch("stripe.Subscription.retrieve", return_value=sub_obj),
+    ):
+        await service.handle_webhook(raw_payload=b"{}", sig_header="ok")
+    docs = [d.to_dict() async for d in client.collection("monthly_quota").stream()]
+    assert len(docs) == 1
+    assert docs[0]["granted"] == 4  # PLAN_QUOTA[LIGHT]
+    assert docs[0]["plan_at_grant"] == "light"
+    pe = [d async for d in client.collection("processed_stripe_events").stream()]
+    assert len(pe) == 1
+
+
+async def test_invoice_paid_duplicate_event_skips(service, client):
+    await FirestoreUserRepository(client).save(
+        User(uid="ip2", email="ip2@example.com", name="Ip2")
+    )
+    sub_obj = {
+        "metadata": {"firebase_uid": "ip2"},
+        "items": {"data": [{"price": {"id": "price_light"}}]},
+    }
+    ev = _invoice_event("evt_dup")
+    with (
+        patch("stripe.Webhook.construct_event", return_value=ev),
+        patch("stripe.Subscription.retrieve", return_value=sub_obj),
+    ):
+        await service.handle_webhook(raw_payload=b"{}", sig_header="ok")
+        await service.handle_webhook(raw_payload=b"{}", sig_header="ok")
+    docs = [d async for d in client.collection("monthly_quota").stream()]
+    assert len(docs) == 1  # exactly-once despite re-delivery
+
+
+async def test_invoice_paid_any_billing_reason_grants(service, client):
+    await FirestoreUserRepository(client).save(
+        User(uid="ip3", email="ip3@example.com", name="Ip3")
+    )
+    sub_obj = {
+        "metadata": {"firebase_uid": "ip3"},
+        "items": {"data": [{"price": {"id": "price_intensive"}}]},
+    }
+    ev = _event(
+        "invoice.paid",
+        {
+            "id": "in_3",
+            "subscription": "sub_3",
+            "billing_reason": "subscription_update",
+        },
+        "evt_ip3",
+    )
+    with (
+        patch("stripe.Webhook.construct_event", return_value=ev),
+        patch("stripe.Subscription.retrieve", return_value=sub_obj),
+    ):
+        await service.handle_webhook(raw_payload=b"{}", sig_header="ok")
+    docs = [d.to_dict() async for d in client.collection("monthly_quota").stream()]
+    assert len(docs) == 1 and docs[0]["granted"] == 16  # Y: grants regardless

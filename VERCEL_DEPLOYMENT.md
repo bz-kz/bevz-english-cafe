@@ -1,110 +1,60 @@
 # Vercel Deployment Guide
 
-## 🔧 Vercelデプロイ問題の修正が完了しました！
+## デプロイ方式
 
-**修正した問題:**
-1. ✅ **CSS構文エラー修正**: `performance.css`の不正な`attr()`使用を修正
-2. ✅ **Tailwind CSS警告解決**: 非推奨の`@tailwindcss/line-clamp`プラグインを削除
-3. ✅ **TypeScript型エラー修正**: 複数のコンポーネントの型定義を修正
-4. ✅ **Vercel設定ファイル追加**: `vercel.json`を作成してデプロイ設定を最適化
-5. ✅ **ビルド検証**: ローカルでのビルドが正常に完了することを確認
+フロントエンドの Vercel デプロイは **Terraform で管理** されています。手動の
+`npx vercel --prod` フローや、リポジトリルートの `vercel.json` の
+`builds`/`routes` は使いません。
 
-## 必要な環境変数
+- Terraform スタック: `terraform/envs/prod/vercel/`（HCP ワークスペース
+  `english-cafe-prod-vercel`）。
+- 環境変数は HCP ワークスペースの `env_vars`（HCL 型）変数で一元管理。
+  追加・変更は HCP 上の `env_vars` マップを編集して `terragrunt apply`。
+  詳細は [`terraform/README.md`](./terraform/README.md) の Vercel スタック節を参照。
+- リポジトリルートの `vercel.json` は **informational のみ**。実際のビルド設定は
+  per-app（`frontend/`）で Vercel が解決します。
 
-Vercelダッシュボードで以下の環境変数を設定してください：
+## プロジェクト設定（参考値）
 
-### Google Analytics
+| 項目 | 値 |
+|---|---|
+| Root Directory | `frontend` |
+| Build Command | `npm run build` |
+| Output Directory | `.next` |
+| Install Command | `npm install` |
+| Node.js Version | `20.x` |
+
+## 環境変数
+
+`env_vars` HCP 変数で管理する主なキー:
+
 ```
-NEXT_PUBLIC_GA_TRACKING_ID=G-XXXXXXXXXX
-```
-
-### Google検索コンソール
-```
+NEXT_PUBLIC_GA_MEASUREMENT_ID=G-XXXXXXXXXX
 NEXT_PUBLIC_GOOGLE_VERIFICATION=your-verification-code
 ```
 
-## Vercelプロジェクト設定
-
-1. **Root Directory**: `frontend`
-2. **Build Command**: `npm run build`
-3. **Output Directory**: `.next`
-4. **Install Command**: `npm install`
-5. **Node.js Version**: `18.x`
-
-## デプロイ設定ファイル
-
-### プロジェクトルート: `vercel.json`
-```json
-{
-  "version": 2,
-  "builds": [
-    {
-      "src": "frontend/package.json",
-      "use": "@vercel/next"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "frontend/$1"
-    }
-  ],
-  "env": {
-    "NODE_ENV": "production"
-  }
-}
-```
-
-### フロントエンド: `frontend/vercel.json`
-```json
-{
-  "version": 2,
-  "framework": "nextjs",
-  "buildCommand": "npm run build",
-  "devCommand": "npm run dev",
-  "installCommand": "npm install",
-  "outputDirectory": ".next"
-}
-```
+`NEXT_PUBLIC_*` はクライアントバンドルにビルド時に焼き込まれるため、変更後は
+Vercel の再ビルド（`main` への push か Redeploy）が必要です。
 
 ## トラブルシューティング
 
-### よくあるエラー
-
-1. **Build failed**: 環境変数が設定されていない
-   - 解決: Vercelダッシュボードで環境変数を設定
-
-2. **TypeScript errors**: 型定義の不整合
-   - 解決: 修正済み（今回のコミットで解決）
-
-3. **CSS compilation error**: 不正なCSS構文
-   - 解決: 修正済み（今回のコミットで解決）
-
-4. **Module not found**: 依存関係の問題
-   - 解決: package.jsonの依存関係を確認
-
-## デプロイコマンド
-
-```bash
-# Vercel CLIを使用する場合
-npx vercel --prod
-
-# または環境変数を指定してデプロイ
-npx vercel --prod --env NEXT_PUBLIC_GA_TRACKING_ID=G-XXXXXXXXXX
-```
+1. **Build failed（環境変数未設定）**
+   - HCP `env_vars` 変数に不足キーを追加し `terragrunt apply`。
+2. **`ENV_CONFLICT`（変数が既に存在）**
+   - Vercel UI で手動作成された同名変数を削除してから再 apply するか、
+     Terraform state に import する。
+3. **env var を変えても反映されない**
+   - `NEXT_PUBLIC_*` はビルド時に焼き込まれる。再ビルドをトリガーする。
+4. **Module not found（依存関係）**
+   - `frontend/package.json` の依存関係を確認。
 
 ## パフォーマンス最適化
 
-- ✅ 動的インポートによるコード分割
-- ✅ 画像最適化（Next.js Image）
-- ✅ フォント最適化
-- ✅ CSS最適化
-- ✅ バンドルサイズ最適化
+- 動的インポートによるコード分割
+- 画像最適化（Next.js Image）
+- フォント最適化 / CSS 最適化 / バンドルサイズ最適化
 
 ## 監視とアナリティクス
 
-- Google Analytics 4 設定済み
-- Web Vitals 監視設定済み
-- エラー追跡設定済み
-
-これらの修正により、Vercelデプロイが成功するはずです。GitHubでの次回のデプロイを確認してください！
+- Google Analytics 4（`NEXT_PUBLIC_GA_MEASUREMENT_ID`）
+- Web Vitals 監視

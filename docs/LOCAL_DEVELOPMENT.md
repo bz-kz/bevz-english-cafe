@@ -7,7 +7,7 @@
 ## 前提条件
 
 - Node.js 20+
-- Python 3.11+
+- Python 3.12
 - uv (Python package manager)
 - Docker & Docker Compose
 - Git

@@ -104,3 +104,38 @@ async def test_webhook_bad_signature_raises(service):
     ):
         with pytest.raises(stripe.SignatureVerificationError):
             await service.handle_webhook(raw_payload=b"{}", sig_header="bad")
+
+
+def _event(etype: str, obj: dict, eid: str = "evt_x") -> dict:
+    return {"id": eid, "type": etype, "data": {"object": obj}}
+
+
+async def test_checkout_completed_saves_customer_and_plan(service, client):
+    await FirestoreUserRepository(client).save(
+        User(uid="cu1", email="cu1@example.com", name="Cu1")
+    )
+    sub_obj = {
+        "metadata": {"firebase_uid": "cu1"},
+        "items": {"data": [{"price": {"id": "price_standard"}}]},
+    }
+    ev = _event(
+        "checkout.session.completed",
+        {
+            "client_reference_id": "cu1",
+            "customer": "cus_1",
+            "subscription": "sub_1",
+        },
+    )
+    with (
+        patch("stripe.Webhook.construct_event", return_value=ev),
+        patch("stripe.Subscription.retrieve", return_value=sub_obj),
+    ):
+        await service.handle_webhook(raw_payload=b"{}", sig_header="ok")
+    got = await FirestoreUserRepository(client).find_by_uid("cu1")
+    assert got.stripe_customer_id == "cus_1"
+    assert got.stripe_subscription_id == "sub_1"
+    assert got.subscription_status == "active"
+    assert got.plan == Plan.STANDARD
+    # no quota granted by checkout.session.completed
+    docs = [d async for d in client.collection("monthly_quota").stream()]
+    assert docs == []

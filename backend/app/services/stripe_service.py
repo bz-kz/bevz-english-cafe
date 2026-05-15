@@ -144,7 +144,33 @@ class StripeService:
         raise NotImplementedError
 
     async def _on_checkout_completed(self, event_id: str, etype: str, obj: Any) -> None:
-        raise NotImplementedError
+        uid = obj.get("client_reference_id")
+        if not uid:
+            logger.error("checkout.session.completed missing client_reference_id")
+            return
+        user = await self._users.find_by_uid(uid)
+        if user is None:
+            logger.error("checkout completed for unknown uid %s", uid)
+            return
+        sub_id = obj.get("subscription")
+        plan: Plan | None = None
+        if sub_id:
+            subscription = await asyncio.to_thread(stripe.Subscription.retrieve, sub_id)
+            price_id = subscription["items"]["data"][0]["price"]["id"]
+            plan = self._plan_for_price.get(price_id)
+        user.update_subscription(
+            customer_id=obj.get("customer"),
+            subscription_id=sub_id,
+            status="active",
+        )
+        if plan is not None:
+            user.set_plan(plan)
+        # save BEFORE claim: this event is the sole carrier of
+        # stripe_customer_id; a claim-first lost-write would strand the
+        # paying user without a customer id. save is an idempotent
+        # overwrite so double-processing is harmless.
+        await self._users.save(user)
+        await self._processed.claim(event_id, etype)
 
     async def _on_subscription_updated(
         self, event_id: str, etype: str, sub: Any

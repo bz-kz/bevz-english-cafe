@@ -46,13 +46,20 @@ export function ProfileCard({ profile }: { profile: MeResponse }) {
             )}
           </dd>
         </div>
-        {profile.current_month_quota && (
+        {profile.quota_summary && (
           <div className="flex">
-            <dt className="w-32 text-gray-500">今月のコマ</dt>
+            <dt className="w-32 text-gray-500">コマ残高</dt>
             <dd>
-              {profile.current_month_quota.used} /{' '}
-              {profile.current_month_quota.granted} 使用 (残{' '}
-              {profile.current_month_quota.remaining})
+              残 {profile.quota_summary.total_remaining}
+              {profile.quota_summary.next_expiry && (
+                <span className="ml-2 text-xs text-gray-400">
+                  (最短失効{' '}
+                  {new Date(
+                    profile.quota_summary.next_expiry
+                  ).toLocaleDateString('ja-JP')}
+                  )
+                </span>
+              )}
             </dd>
           </div>
         )}

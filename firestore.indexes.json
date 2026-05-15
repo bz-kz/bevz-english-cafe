@@ -14,6 +14,14 @@
       "collectionGroup": "users",
       "queryScope": "COLLECTION",
       "fields": [{ "fieldPath": "updated_at", "order": "DESCENDING" }]
+    },
+    {
+      "collectionGroup": "monthly_quota",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "user_id", "order": "ASCENDING" },
+        { "fieldPath": "year_month", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

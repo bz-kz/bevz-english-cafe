@@ -91,3 +91,70 @@ class StripeService:
             return_url=self._settings.stripe_portal_return_url,
         )
         return str(session.url)
+
+    def _resolve_sub_id(self, invoice: Any) -> str | None:
+        sub = invoice.get("subscription")
+        if sub:
+            return str(sub)
+        parent = invoice.get("parent") or {}
+        details = parent.get("subscription_details") or {}
+        sub = details.get("subscription")
+        return str(sub) if sub else None
+
+    async def _resolve_uid_plan(self, invoice: Any) -> tuple[str, Plan] | None:
+        sub_id = self._resolve_sub_id(invoice)
+        if not sub_id:
+            logger.error("invoice has no subscription id: %s", invoice.get("id"))
+            return None
+        subscription = await asyncio.to_thread(stripe.Subscription.retrieve, sub_id)
+        uid = (subscription.get("metadata") or {}).get("firebase_uid")
+        if not uid:
+            logger.error("subscription %s missing firebase_uid", sub_id)
+            return None
+        price_id = subscription["items"]["data"][0]["price"]["id"]
+        plan = self._plan_for_price.get(price_id)
+        if plan is None:
+            logger.error("unknown price id %s", price_id)
+            return None
+        return uid, plan
+
+    async def handle_webhook(self, *, raw_payload: bytes, sig_header: str) -> None:
+        event = await asyncio.to_thread(
+            stripe.Webhook.construct_event,
+            raw_payload,
+            sig_header,
+            self._settings.stripe_webhook_secret,
+        )
+        etype = event["type"]
+        obj = event["data"]["object"]
+        if etype == "invoice.paid":
+            await self._on_invoice_paid(event["id"], obj)
+        elif etype == "checkout.session.completed":
+            await self._on_checkout_completed(event["id"], etype, obj)
+        elif etype == "customer.subscription.updated":
+            await self._on_subscription_updated(event["id"], etype, obj)
+        elif etype == "customer.subscription.deleted":
+            await self._on_subscription_deleted(event["id"], etype, obj)
+        elif etype == "invoice.payment_failed":
+            await self._on_payment_failed(event["id"], etype, obj)
+        else:
+            logger.info("ignoring stripe event %s", etype)
+
+    async def _on_invoice_paid(self, event_id: str, invoice: Any) -> None:
+        raise NotImplementedError
+
+    async def _on_checkout_completed(self, event_id: str, etype: str, obj: Any) -> None:
+        raise NotImplementedError
+
+    async def _on_subscription_updated(
+        self, event_id: str, etype: str, sub: Any
+    ) -> None:
+        raise NotImplementedError
+
+    async def _on_subscription_deleted(
+        self, event_id: str, etype: str, sub: Any
+    ) -> None:
+        raise NotImplementedError
+
+    async def _on_payment_failed(self, event_id: str, etype: str, invoice: Any) -> None:
+        raise NotImplementedError

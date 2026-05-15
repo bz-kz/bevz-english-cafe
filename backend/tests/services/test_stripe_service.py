@@ -6,6 +6,7 @@ import os
 from unittest.mock import MagicMock, patch
 
 import pytest
+import stripe
 
 if not os.environ.get("FIRESTORE_EMULATOR_HOST"):
     pytest.skip("emulator not configured", allow_module_level=True)
@@ -94,3 +95,12 @@ async def test_create_portal_with_customer(service):
         url = await service.create_portal_session(user=user)
     assert url == "https://portal.stripe/x"
     assert m.call_args.kwargs["customer"] == "cus_3"
+
+
+async def test_webhook_bad_signature_raises(service):
+    with patch(
+        "stripe.Webhook.construct_event",
+        side_effect=stripe.SignatureVerificationError("bad", "sig"),
+    ):
+        with pytest.raises(stripe.SignatureVerificationError):
+            await service.handle_webhook(raw_payload=b"{}", sig_header="bad")

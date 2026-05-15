@@ -334,3 +334,48 @@ async def test_admin_force_cancel_refund_uses_consumed_doc(service, firestore_cl
         await firestore_client.collection("monthly_quota").document(doc_id).get()
     )
     assert after_cancel.to_dict()["used"] == 0
+
+
+async def test_admin_force_book_consume_quota_fifo(service, firestore_client):
+    # two active docs; admin_force_book(consume_quota=True) decrements oldest
+    # and records consumed_quota_doc_id
+    slot_id = await _make_slot(firestore_client)
+    await _make_user(firestore_client)
+    now = _now()
+    older_id = await _seed_active_quota(
+        firestore_client,
+        uid="u1",
+        granted=4,
+        used=0,
+        granted_at=now - timedelta(days=20),
+        expires_at=now + timedelta(days=40),
+    )
+    newer_id = await _seed_active_quota(
+        firestore_client,
+        uid="u1",
+        granted=4,
+        used=0,
+        granted_at=now - timedelta(days=2),
+        expires_at=now + timedelta(days=58),
+    )
+    booking = await service.admin_force_book(
+        slot_id=slot_id, user_id="u1", consume_quota=True, consume_trial=False
+    )
+    assert booking.consumed_quota_doc_id == older_id
+    older = await firestore_client.collection("monthly_quota").document(older_id).get()
+    newer = await firestore_client.collection("monthly_quota").document(newer_id).get()
+    assert older.to_dict()["used"] == 1
+    assert newer.to_dict()["used"] == 0
+
+
+async def test_admin_force_book_consume_quota_no_docs_warns_and_succeeds(
+    service, firestore_client
+):
+    # no quota docs: booking still succeeds, consumed_quota_doc_id is None
+    slot_id = await _make_slot(firestore_client)
+    await _make_user(firestore_client)
+    booking = await service.admin_force_book(
+        slot_id=slot_id, user_id="u1", consume_quota=True, consume_trial=False
+    )
+    assert booking.status == BookingStatus.CONFIRMED
+    assert booking.consumed_quota_doc_id is None

@@ -37,6 +37,7 @@ from app.services.booking_errors import (
     SlotNotFoundError,
     SlotNotOpenError,
     TrialAlreadyUsedError,
+    UserNotFoundError,
 )
 
 JST = ZoneInfo("Asia/Tokyo")
@@ -146,6 +147,82 @@ class BookingService:
                 bookings_col.document(str(booking.id)),
                 self._booking_repo._to_dict(booking),
             )
+            return booking
+
+        return cast(Booking, await txn(self._fs.transaction()))
+
+    async def admin_force_book(
+        self,
+        *,
+        slot_id: str,
+        user_id: str,
+        consume_quota: bool,
+        consume_trial: bool,
+    ) -> Booking:
+        """Admin による強制予約。24h/quota/trial/closed/past を bypass する。
+
+        capacity と重複(AlreadyBooked)だけは整合性のため守る。
+        """
+        slot_ref = self._fs.collection("lesson_slots").document(slot_id)
+        bookings_col = self._fs.collection("bookings")
+        users_col = self._fs.collection("users")
+        new_booking_id = uuid4()
+
+        @fs.async_transactional
+        async def txn(tx):  # type: ignore[no-untyped-def]
+            slot_snap = await slot_ref.get(transaction=tx)
+            if not slot_snap.exists:
+                raise SlotNotFoundError(slot_id)
+            slot = self._slot_repo._from_dict(slot_snap.to_dict(), slot_id)
+
+            if slot.is_full:
+                raise SlotFullError(slot_id)
+
+            existing_query = (
+                bookings_col.where("user_id", "==", user_id)
+                .where("slot_id", "==", slot_id)
+                .where("status", "==", BookingStatus.CONFIRMED.value)
+                .limit(1)
+            )
+            async for _doc in existing_query.stream(transaction=tx):
+                raise AlreadyBookedError(slot_id)
+
+            user_ref = users_col.document(user_id)
+            user_snap = await user_ref.get(transaction=tx)
+            if not user_snap.exists:
+                raise UserNotFoundError(user_id)
+
+            quota_ref = None
+            quota_used: int | None = None
+            if consume_quota and slot.lesson_type != LessonType.TRIAL:
+                ym = _jst_year_month(_utc_now())
+                quota_ref = self._fs.collection("monthly_quota").document(
+                    f"{user_id}_{ym}"
+                )
+                q_snap = await quota_ref.get(transaction=tx)
+                if q_snap.exists:
+                    quota_used = int(cast(dict[str, Any], q_snap.to_dict())["used"])
+
+            booking = Booking(
+                id=new_booking_id,
+                slot_id=slot_id,
+                user_id=user_id,
+                status=BookingStatus.CONFIRMED,
+                created_at=_utc_now(),
+                cancelled_at=None,
+            )
+            tx.update(
+                slot_ref,
+                {"booked_count": slot.booked_count + 1, "updated_at": _utc_now()},
+            )
+            tx.set(
+                bookings_col.document(str(booking.id)),
+                self._booking_repo._to_dict(booking),
+            )
+            if consume_trial and slot.lesson_type == LessonType.TRIAL:
+                tx.update(user_ref, {"trial_used": True, "updated_at": _utc_now()})
+            if quota_ref is not None and quota_used is not None:
+                tx.update(quota_ref, {"used": quota_used + 1})
             return booking
 
         return cast(Booking, await txn(self._fs.transaction()))

@@ -84,6 +84,11 @@ class FirestoreUserRepository(UserRepository):
             "trial_used": user.trial_used,
             "created_at": user.created_at,
             "updated_at": user.updated_at,
+            "stripe_customer_id": user.stripe_customer_id,
+            "stripe_subscription_id": user.stripe_subscription_id,
+            "subscription_status": user.subscription_status,
+            "subscription_cancel_at_period_end": user.subscription_cancel_at_period_end,
+            "current_period_end": user.current_period_end,
         }
 
     @staticmethod
@@ -101,4 +106,11 @@ class FirestoreUserRepository(UserRepository):
             trial_used=bool(data.get("trial_used", False)),
             created_at=data["created_at"],
             updated_at=data["updated_at"],
+            stripe_customer_id=data.get("stripe_customer_id"),
+            stripe_subscription_id=data.get("stripe_subscription_id"),
+            subscription_status=data.get("subscription_status"),
+            subscription_cancel_at_period_end=bool(
+                data.get("subscription_cancel_at_period_end", False)
+            ),
+            current_period_end=data.get("current_period_end"),
         )

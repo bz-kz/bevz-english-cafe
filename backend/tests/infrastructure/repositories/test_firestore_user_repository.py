@@ -133,3 +133,40 @@ class TestListAll:
             await repo.save(_user(f"u{i}", f"u{i}@example.com", f"name{i}"))
         result = await repo.list_all(limit=2)
         assert len(result) == 2
+
+
+async def test_subscription_fields_roundtrip(repo):
+    from datetime import UTC, datetime
+
+    from app.domain.entities.user import User
+
+    now = datetime(2026, 6, 1, tzinfo=UTC)
+    u = User(uid="sub1", email="s@example.com", name="Sub")
+    u.update_subscription(
+        customer_id="cus_X",
+        subscription_id="sub_X",
+        status="active",
+        cancel_at_period_end=True,
+        current_period_end=now,
+    )
+    await repo.save(u)
+    got = await repo.find_by_uid("sub1")
+    assert got is not None
+    assert got.stripe_customer_id == "cus_X"
+    assert got.stripe_subscription_id == "sub_X"
+    assert got.subscription_status == "active"
+    assert got.subscription_cancel_at_period_end is True
+    assert got.current_period_end == now
+
+
+async def test_subscription_fields_default_none(repo):
+    from app.domain.entities.user import User
+
+    u = User(uid="sub2", email="s2@example.com", name="Sub2")
+    await repo.save(u)
+    got = await repo.find_by_uid("sub2")
+    assert got is not None
+    assert got.stripe_customer_id is None
+    assert got.subscription_status is None
+    assert got.subscription_cancel_at_period_end is False
+    assert got.current_period_end is None

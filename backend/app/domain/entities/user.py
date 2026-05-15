@@ -27,6 +27,11 @@ class User:
     is_admin: bool = False
     created_at: datetime = field(default_factory=_utc_now)
     updated_at: datetime = field(default_factory=_utc_now)
+    stripe_customer_id: str | None = None
+    stripe_subscription_id: str | None = None
+    subscription_status: str | None = None
+    subscription_cancel_at_period_end: bool = False
+    current_period_end: datetime | None = None
 
     def __post_init__(self) -> None:
         if not self.uid:
@@ -61,4 +66,35 @@ class User:
         if self.trial_used:
             return
         self.trial_used = True
+        self.updated_at = _utc_now()
+
+    def update_subscription(
+        self,
+        *,
+        customer_id: str | None = None,
+        subscription_id: str | None = None,
+        status: str | None = None,
+        cancel_at_period_end: bool | None = None,
+        current_period_end: datetime | None = None,
+    ) -> None:
+        """Stripe webhook 由来のサブスク状態を反映。None は「変更なし」。"""
+        if customer_id is not None:
+            self.stripe_customer_id = customer_id
+        if subscription_id is not None:
+            self.stripe_subscription_id = subscription_id
+        if status is not None:
+            self.subscription_status = status
+        if cancel_at_period_end is not None:
+            self.subscription_cancel_at_period_end = cancel_at_period_end
+        if current_period_end is not None:
+            self.current_period_end = current_period_end
+        self.updated_at = _utc_now()
+
+    def clear_subscription(self) -> None:
+        """解約 (customer.subscription.deleted) 時。"""
+        self.plan = None
+        self.plan_started_at = None
+        self.stripe_subscription_id = None
+        self.subscription_status = "canceled"
+        self.subscription_cancel_at_period_end = False
         self.updated_at = _utc_now()

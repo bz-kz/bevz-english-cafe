@@ -46,6 +46,19 @@ export function ProfileCard({ profile }: { profile: MeResponse }) {
             )}
           </dd>
         </div>
+        {process.env.NEXT_PUBLIC_STRIPE_ENABLED === 'true' && (
+          <div className="flex">
+            <dt className="w-32 text-gray-500" />
+            <dd>
+              <Link
+                href="/mypage/plan"
+                className="text-sm text-blue-600 hover:underline"
+              >
+                プラン管理
+              </Link>
+            </dd>
+          </div>
+        )}
         {profile.quota_summary && (
           <div className="flex">
             <dt className="w-32 text-gray-500">コマ残高</dt>

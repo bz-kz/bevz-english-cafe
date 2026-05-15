@@ -10,6 +10,10 @@ const profile = (overrides: Partial<MeResponse> = {}): MeResponse => ({
   plan: 'light',
   trial_used: true,
   quota_summary: null,
+  stripe_subscription_id: null,
+  subscription_status: null,
+  subscription_cancel_at_period_end: false,
+  current_period_end: null,
   created_at: '',
   updated_at: '',
   ...overrides,
@@ -46,5 +50,24 @@ describe('ProfileCard', () => {
   it('hides the quota row when quota_summary is null', () => {
     render(<ProfileCard profile={profile({ quota_summary: null })} />);
     expect(screen.queryByText('コマ残高')).not.toBeInTheDocument();
+  });
+
+  it('shows プラン管理 link when stripe flag is on', () => {
+    const OLD = process.env.NEXT_PUBLIC_STRIPE_ENABLED;
+    process.env.NEXT_PUBLIC_STRIPE_ENABLED = 'true';
+    render(<ProfileCard profile={profile()} />);
+    expect(screen.getByRole('link', { name: /プラン管理/ })).toHaveAttribute(
+      'href',
+      '/mypage/plan'
+    );
+    process.env.NEXT_PUBLIC_STRIPE_ENABLED = OLD;
+  });
+
+  it('hides プラン管理 link when stripe flag is off', () => {
+    const OLD = process.env.NEXT_PUBLIC_STRIPE_ENABLED;
+    process.env.NEXT_PUBLIC_STRIPE_ENABLED = 'false';
+    render(<ProfileCard profile={profile()} />);
+    expect(screen.queryByRole('link', { name: /プラン管理/ })).toBeNull();
+    process.env.NEXT_PUBLIC_STRIPE_ENABLED = OLD;
   });
 });

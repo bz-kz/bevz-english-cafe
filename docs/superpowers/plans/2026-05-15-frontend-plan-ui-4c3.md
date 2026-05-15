@@ -87,7 +87,7 @@ const profile = (overrides: Partial<MeResponse> = {}): MeResponse => ({
 
 - [ ] **Step 3: Add env var to example**
 
-Append to `frontend/.env.example`:
+Append to `frontend/.env.example` (ensure a blank line precedes the block — the file's last line `NEXT_PUBLIC_API_URL=...api` has no trailing newline, so prepend a newline):
 
 ```
 # Stripe (sub-project 4c) — set "true" to expose /mypage/plan UI
@@ -730,10 +730,13 @@ import { useNotificationStore } from '@/stores/notificationStore';
 import { PlanCard } from './PlanCard';
 import { SubscriptionStatus } from './SubscriptionStatus';
 
-const FLAG_ON = process.env.NEXT_PUBLIC_STRIPE_ENABLED === 'true';
 const ALL_PLANS: Plan[] = ['light', 'standard', 'intensive'];
 
 export function PlanPageClient() {
+  // (C1) read the flag at RENDER time, not a module-level const — jest
+  // toggles process.env per-test after import; a module const would freeze.
+  // Same pattern as ProfileCard (Task 6).
+  const flagOn = process.env.NEXT_PUBLIC_STRIPE_ENABLED === 'true';
   const { user, loading } = useAuth();
   const router = useRouter();
   const search = useSearchParams();
@@ -755,12 +758,12 @@ export function PlanPageClient() {
   }, [notify]);
 
   useEffect(() => {
-    if (!FLAG_ON || !user) return;
+    if (!flagOn || !user) return;
     load();
-  }, [user, load]);
+  }, [user, load, flagOn]);
 
   useEffect(() => {
-    if (!FLAG_ON || statusHandled.current) return;
+    if (!flagOn || statusHandled.current) return;
     const s = search.get('status');
     if (s === 'success') {
       statusHandled.current = true;
@@ -770,9 +773,9 @@ export function PlanPageClient() {
       statusHandled.current = true;
       notify.info('お手続きをキャンセルしました');
     }
-  }, [search, notify, load]);
+  }, [search, notify, load, flagOn]);
 
-  if (!FLAG_ON) {
+  if (!flagOn) {
     return <div className="p-6 text-center">準備中です</div>;
   }
   if (loading || !user || !profile) {

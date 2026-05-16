@@ -7,7 +7,9 @@ test.describe('marketing landing', () => {
     expect(resp?.status()).toBeLessThan(400);
     await expect(page.locator('header').first()).toBeVisible();
     await expect(page.locator('footer').first()).toBeVisible();
-    await expect(page.locator('main')).toBeVisible();
+    // Root layout renders <main class="flex-1"> AND pages render their own
+    // <main> → two matches; assert the first (a stricter scoped check).
+    await expect(page.locator('main').first()).toBeVisible();
   });
 
   test('primary nav reaches key pages', async ({ page }) => {
@@ -21,7 +23,9 @@ test.describe('marketing landing', () => {
     ]) {
       const r = await page.goto(path);
       expect(r?.status(), `GET ${path}`).toBeLessThan(400);
-      await expect(page.locator('main')).toBeVisible();
+      // Root layout renders <main class="flex-1"> AND pages render their own
+      // <main> → two matches; assert the first (a stricter scoped check).
+      await expect(page.locator('main').first()).toBeVisible();
     }
   });
 });

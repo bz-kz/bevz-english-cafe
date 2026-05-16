@@ -49,12 +49,18 @@ test.describe('contact form', () => {
   });
 
   test('backend 500 shows submit error block', async ({ page }) => {
-    await page.route('**/api/v1/contacts**', r =>
-      r.fulfill({
-        status: 500,
-        contentType: 'application/json',
-        body: '{"detail":"boom"}',
-      })
+    // ContactForm posts via axios with an absolute baseURL
+    // (http://localhost:8010/api/v1/contacts/). A `**/api/v1/contacts**`
+    // string glob does NOT intercept that cross-origin absolute URL; a URL
+    // predicate matcher does. (Verified: glob → 0 intercepts, predicate → 1.)
+    await page.route(
+      url => url.pathname.includes('/api/v1/contacts'),
+      r =>
+        r.fulfill({
+          status: 500,
+          contentType: 'application/json',
+          body: '{"detail":"boom"}',
+        })
     );
     await page.goto(ROUTES.contact);
     await fillContactForm(page, {

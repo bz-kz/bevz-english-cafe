@@ -12,7 +12,7 @@ test.describe('public browse', () => {
     test(`renders ${path}`, async ({ page }) => {
       const r = await page.goto(path);
       expect(r?.status(), path).toBeLessThan(400);
-      await expect(page.locator('main')).toBeVisible();
+      await expect(page.locator('main').first()).toBeVisible();
     });
   }
 
@@ -22,7 +22,7 @@ test.describe('public browse', () => {
     await expect(link).toBeVisible();
     await link.click();
     await expect(page).toHaveURL(/\/instructors\/.+/);
-    await expect(page.locator('main')).toBeVisible();
+    await expect(page.locator('main').first()).toBeVisible();
   });
 
   test('lessons list -> first detail [id]', async ({ page }) => {
@@ -31,7 +31,7 @@ test.describe('public browse', () => {
     if (await link.count()) {
       await link.click();
       await expect(page).toHaveURL(/\/lessons\/.+/);
-      await expect(page.locator('main')).toBeVisible();
+      await expect(page.locator('main').first()).toBeVisible();
     }
   });
 });

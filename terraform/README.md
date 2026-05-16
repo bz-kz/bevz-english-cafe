@@ -63,6 +63,20 @@ your own credentials:
    disabled. Then re-enable billing manually and bump the budget back to ¥2000
    via `terragrunt apply`.
 
+### WIF coverage exceptions
+
+`english-cafe-prod-billing` (billing-killswitch — includes
+`google_billing_account_iam_member` + `google_billing_budget`) and
+`english-cafe-prod-monthly-quota` are **not** applied via the HCP runner WIF.
+Billing-account-scoped IAM cannot be expressed by the project-level
+`runner_iam_roles`, so these stacks are applied manually / with local ADC.
+The 2026-05-16 IAM discover confirmed neither workspace is in the runner SA's
+`roles/iam.workloadIdentityUser` principalSet. To bring either under WIF later
+you must (1) add the workspace to `gcp-wif`'s `allowed_workspaces`, and
+(2) grant the runner SA billing-account-level roles (e.g. `roles/billing.admin`)
+out of band — which makes the `wif` stack bootstrap itself require
+billing-account admin. This is an intentional, documented exception.
+
 ---
 
 ## Apply order (first-time GCP bootstrap)

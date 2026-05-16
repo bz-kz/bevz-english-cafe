@@ -42,8 +42,15 @@ variable "runner_iam_roles" {
     "roles/artifactregistry.admin",          # cloudrun stack — create AR repos
     "roles/iam.workloadIdentityPoolAdmin",   # wif stack itself (re-applies)
     "roles/resourcemanager.projectIamAdmin", # cloudrun stack — bind roles to runtime SA
+    "roles/serviceusage.serviceUsageAdmin",  # scheduler-slots — enable APIs
+    "roles/pubsub.admin",                    # scheduler-slots — Pub/Sub topic
+    "roles/storage.admin",                   # scheduler-slots — Function source bucket
+    "roles/cloudfunctions.admin",            # scheduler-slots — Gen2 Function
+    "roles/eventarc.admin",                  # scheduler-slots — Gen2 Eventarc trigger
+    "roles/cloudbuild.builds.editor",        # scheduler-slots — Gen2 build
+    "roles/cloudscheduler.admin",            # scheduler-slots — Scheduler job
   ]
-  description = "Project-level IAM roles granted to the HCP runner SA. Union of what every stack needs to apply."
+  description = "Project-level IAM roles granted to the HCP runner SA. Union of what every WIF-applied stack needs. Reconciled to actual IAM 2026-05-16 (discover dump)."
 }
 
 variable "allowed_workspaces" {
@@ -52,8 +59,9 @@ variable "allowed_workspaces" {
     "english-cafe-prod-wif",
     "english-cafe-prod-firestore",
     "english-cafe-prod-cloudrun",
+    "english-cafe-prod-scheduler-slots", # reconciled — imperative grant declared
   ]
-  description = "HCP workspace names allowed to impersonate the runner SA via WIF."
+  description = "HCP workspace names allowed to impersonate the runner SA via WIF. Reconciled to actual 2026-05-16. NOTE: monthly-quota / billing are NOT here — they are not applied via HCP runner WIF (see terraform/README.md WIF coverage exceptions)."
 }
 
 variable "github_provider_id" {

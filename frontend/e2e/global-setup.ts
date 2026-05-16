@@ -93,10 +93,16 @@ export default async function globalSetup(_c: FullConfig) {
   const now = Date.now();
   const ym = new Date(now).toISOString().slice(0, 7); // YYYY-MM
   const nowIso = new Date(now).toISOString();
-  // Slot start 72h out: backend find_open_future needs start_at > now AND the
-  // BookingGrid only renders an open `○` cell when start - now >= 24h.
-  const startAt = new Date(now + 72 * 3600 * 1000).toISOString();
-  const endAt = new Date(now + 73 * 3600 * 1000).toISOString();
+  // BookingGrid renders a slot only when its LOCAL hour/minute lands on a grid
+  // cell (hours 9–15, minute 0/30) AND start - now >= 24h, within a 14-day
+  // window. Pick 10:00 local time 3 days out so the open `○` cell is clickable
+  // and backend find_in_range / book() (start_at > now) all hold.
+  const slotDay = new Date(now);
+  slotDay.setDate(slotDay.getDate() + 3);
+  slotDay.setHours(10, 0, 0, 0);
+  const startAt = slotDay.toISOString();
+  const slotEnd = new Date(slotDay.getTime() + 60 * 60 * 1000);
+  const endAt = slotEnd.toISOString();
   // Quota must outlive the booking check (expires_at > now).
   const quotaExpires = new Date(now + 60 * 24 * 3600 * 1000).toISOString();
 

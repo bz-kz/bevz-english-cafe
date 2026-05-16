@@ -139,14 +139,15 @@ resource "google_service_account_iam_member" "github_wif" {
 
 - [ ] **Step 4: Validate the module (syntax/type)**
 
-Run:
+Run (the snippets' inline-comment spacing is NOT canonical — `terraform fmt` re-aligns it, so **always run `terraform fmt` first**, then validate, then verify clean):
 ```bash
 cd terraform/modules/gcp-wif
+terraform fmt                                   # mandatory — normalises the new blocks
 terraform init -backend=false -input=false >/dev/null
 terraform validate
-terraform fmt -check
+terraform fmt -check                            # now must be clean
 ```
-Expected: `Success! The configuration is valid.` and `fmt -check` exits 0 (no diff). If `fmt -check` reports files, run `terraform fmt` and re-check.
+Expected: `terraform validate` → `Success! The configuration is valid.`; the final `terraform fmt -check` exits 0. (Stage the fmt-normalised files in Step 5.)
 
 - [ ] **Step 5: Commit**
 
@@ -187,12 +188,12 @@ In the same file, extend the existing bootstrap comment block (the one above `in
 
 - [ ] **Step 3: Validate HCL formatting**
 
-Run:
+Run (installed terragrunt is v1.0.4 — `hcl format`, not the old `hclfmt`/`--terragrunt-*` flags):
 ```bash
 cd "$(git rev-parse --show-toplevel)"
-terragrunt hclfmt --terragrunt-check --terragrunt-working-dir terraform/envs/prod/wif
+terragrunt hcl format --check --working-dir terraform/envs/prod/wif
 ```
-Expected: exit 0 (no formatting diff). If it reports a diff, run `terragrunt hclfmt --terragrunt-working-dir terraform/envs/prod/wif` and re-check.
+Expected: exit 0 (no formatting diff). If it reports a diff, run `terragrunt hcl format --working-dir terraform/envs/prod/wif` and re-check.
 
 - [ ] **Step 4: Commit**
 
@@ -314,10 +315,10 @@ jobs:
 
 - [ ] **Step 2: Validate YAML parses + structure**
 
-Run:
+Run (system `python3` has no PyYAML — use the backend uv env; cwd becomes `backend`, so the workflow path is `../`):
 ```bash
-cd "$(git rev-parse --show-toplevel)"
-python3 -c "import yaml,sys; d=yaml.safe_load(open('.github/workflows/backend-deploy.yml')); assert 'jobs' in d and set(d['jobs'])>={'test','deploy'}, d; assert d['jobs']['deploy']['needs']=='test'; assert d['permissions']['id-token']=='write'; print('workflow OK:', list(d['jobs']))"
+cd "$(git rev-parse --show-toplevel)/backend"
+uv run python -c "import yaml; d=yaml.safe_load(open('../.github/workflows/backend-deploy.yml')); assert 'jobs' in d and set(d['jobs'])>={'test','deploy'}, d; assert d['jobs']['deploy']['needs']=='test'; assert d['permissions']['id-token']=='write'; print('workflow OK:', list(d['jobs']))"
 ```
 Expected: `workflow OK: ['test', 'deploy']` (no AssertionError / YAML error).
 
@@ -354,7 +355,7 @@ In `CLAUDE.md`, in the `## Deployment` section, immediately after the `- Backend
 
 - [ ] **Step 2: Verify the doc edit + whole-repo terraform fmt**
 
-Run:
+Run (gcp-wif was already fmt-normalised in Task 1 Step 4, so this should be clean; if Task 1's `terraform fmt` was skipped this will diff — run `terraform fmt -recursive terraform/modules/gcp-wif` then re-check and amend Task 1's commit's staged files):
 ```bash
 cd "$(git rev-parse --show-toplevel)"
 grep -q "CI/CD (backend)" CLAUDE.md && echo "CLAUDE.md note present"

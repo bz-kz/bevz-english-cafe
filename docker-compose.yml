@@ -15,6 +15,15 @@ services:
       - NODE_ENV=development
       - NEXT_PUBLIC_API_URL=http://localhost:8010
       - BACKEND_URL=http://backend:8010
+      # e2e/local-only Firebase wiring. Required even for public routes:
+      # firebase.ts runs getAuth() at module top-level (imported by the root
+      # layout) — a missing/empty NEXT_PUBLIC_FIREBASE_API_KEY SSR-500s every
+      # route with auth/invalid-api-key. emulator does not validate the value.
+      - NEXT_PUBLIC_FIREBASE_API_KEY=demo-api-key
+      - NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=demo-english-cafe.firebaseapp.com
+      - NEXT_PUBLIC_FIREBASE_PROJECT_ID=demo-english-cafe
+      - NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST=localhost:9099
+      - NEXT_PUBLIC_STRIPE_ENABLED=true
     depends_on:
       - backend
 
@@ -28,14 +37,44 @@ services:
       - ./backend:/app
     environment:
       - FIRESTORE_EMULATOR_HOST=firestore-emulator:8080
-      - GCP_PROJECT_ID=english-cafe-dev
+      # C1: token verify (firebase-admin) reads GOOGLE_CLOUD_PROJECT; the
+      # Firestore AsyncClient reads GCP_PROJECT_ID (config.py). Both must be
+      # demo-english-cafe so token aud/iss, Firestore namespace and the e2e
+      # seed all line up. e2e-only — prod is unaffected.
+      - GCP_PROJECT_ID=demo-english-cafe
+      - GOOGLE_CLOUD_PROJECT=demo-english-cafe
+      - FIREBASE_AUTH_EMULATOR_HOST=firebase-auth-emulator:9099
       - ENVIRONMENT=development
       - CORS_ORIGINS=http://localhost:3010
     depends_on:
-      - firestore-emulator
+      firestore-emulator:
+        condition: service_started
+      firebase-auth-emulator:
+        condition: service_healthy
 
   firestore-emulator:
     image: gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators
-    command: ["gcloud", "emulators", "firestore", "start", "--host-port=0.0.0.0:8080", "--project=english-cafe-dev"]
+    command: ["gcloud", "emulators", "firestore", "start", "--host-port=0.0.0.0:8080", "--project=demo-english-cafe"]
     ports:
       - "8080:8080"
+
+  # e2e-only Firebase Auth emulator (firebase-tools — not in the gcloud-cli
+  # image). Healthcheck makes `docker compose up -d --wait` block until it is
+  # actually serving, so globalSetup's fail-fast ping never races first boot.
+  firebase-auth-emulator:
+    image: node:20-alpine
+    working_dir: /app
+    command: sh -c "npm i -g firebase-tools@latest && firebase emulators:start --only auth --project demo-english-cafe"
+    volumes:
+      - ./firebase.json:/app/firebase.json:ro
+      - ./.firebaserc:/app/.firebaserc:ro
+    ports:
+      - "9099:9099"
+    healthcheck:
+      # Emulator binds 0.0.0.0:9099 (IPv4); alpine `localhost` resolves ::1
+      # first → connection refused. Hit 127.0.0.1 explicitly.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9099/"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 90s

@@ -3,17 +3,26 @@ import Header from '../Header';
 
 const signOutMock = jest.fn();
 
+const authState = {
+  user: { displayName: 'テスト太郎', email: 't@example.com' } as {
+    displayName: string;
+    email: string;
+  } | null,
+  isAdmin: false,
+  loading: false,
+  signOut: signOutMock,
+};
+
 jest.mock('@/stores/authStore', () => ({
-  useAuthStore: () => ({
-    user: { displayName: 'テスト太郎', email: 't@example.com' },
-    isAdmin: false,
-    signOut: signOutMock,
-  }),
+  useAuthStore: () => authState,
 }));
 
 describe('Header dropdown', () => {
   beforeEach(() => {
     signOutMock.mockReset();
+    authState.user = { displayName: 'テスト太郎', email: 't@example.com' };
+    authState.isAdmin = false;
+    authState.loading = false;
   });
 
   it('starts closed', () => {
@@ -61,5 +70,37 @@ describe('Header dropdown', () => {
     fireEvent.click(screen.getByText('ログアウト'));
     expect(signOutMock).toHaveBeenCalledTimes(1);
     expect(screen.queryByText('マイページ')).not.toBeInTheDocument();
+  });
+
+  it('renders a non-link Admin placeholder while auth is loading', () => {
+    authState.loading = true;
+    render(<Header />);
+    fireEvent.click(screen.getByRole('button', { name: /テスト太郎/i }));
+    expect(screen.getByText('Admin')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: 'Admin' })
+    ).not.toBeInTheDocument();
+  });
+
+  it('renders the Admin link when resolved and isAdmin', () => {
+    authState.loading = false;
+    authState.isAdmin = true;
+    render(<Header />);
+    fireEvent.click(screen.getByRole('button', { name: /テスト太郎/i }));
+    expect(screen.getByRole('link', { name: 'Admin' })).toHaveAttribute(
+      'href',
+      '/admin/lessons'
+    );
+  });
+
+  it('renders no Admin entry when resolved and not admin', () => {
+    authState.loading = false;
+    authState.isAdmin = false;
+    render(<Header />);
+    fireEvent.click(screen.getByRole('button', { name: /テスト太郎/i }));
+    expect(screen.queryByText('Admin')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: 'Admin' })
+    ).not.toBeInTheDocument();
   });
 });

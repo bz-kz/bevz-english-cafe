@@ -38,17 +38,31 @@ async function signUp(email: string, password: string): Promise<string> {
 }
 
 async function setAdmin(localId: string) {
-  await fetch(
-    `${AUTH}/identitytoolkit.googleapis.com/v1/projects/${PROJECT}/accounts:update?key=${KEY}`,
+  // The project-scoped accounts:update is an Identity-Platform admin route:
+  // the Auth emulator rejects it unauthenticated ("INSUFFICIENT_PERMISSION:
+  // Only authenticated requests can specify target_project_id"). The emulator
+  // accepts the documented super-user `Authorization: Bearer owner`. Without
+  // this the custom claim is silently NOT set → admin specs would fail.
+  const r = await fetch(
+    `${AUTH}/identitytoolkit.googleapis.com/v1/projects/${PROJECT}/accounts:update`,
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer owner',
+      },
       body: JSON.stringify({
         localId,
         customAttributes: JSON.stringify({ admin: true }),
       }),
     }
   );
+  if (!r.ok) {
+    throw new Error(
+      `setAdmin failed (${r.status}): ${await r.text()} — the admin custom ` +
+        `claim was not applied; admin e2e specs cannot pass.`
+    );
+  }
 }
 
 // Force Firestore timestamp typing where the backend repo reads the field as

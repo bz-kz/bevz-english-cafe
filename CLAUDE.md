@@ -10,7 +10,7 @@ npm-workspaces monorepo for an English-conversation cafe marketing site.
 - `backend/` — FastAPI on Python 3.12, managed by **uv** (not pip/poetry). Runs on `:8010`.
 - `shared/types/` and `shared/constants/` — TypeScript types/config intended to be shared (only frontend imports them today).
 - `terraform/` — HCP Terraform + Terragrunt stacks for the production environment (Vercel + GCP WIF + Firestore + Cloud Run + billing killswitch).
-- `docker-compose.yml` — local dev wiring frontend + backend + Firestore Emulator (gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators).
+- `docker-compose.yml` — local dev wiring frontend + backend + Firestore Emulator (gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators). The `firebase-auth-emulator` service (`:9099`) is **e2e-only** (Playwright `globalSetup` seeds it); e2e is not CI-integrated — run it locally with `docker compose up -d --wait`.
 
 The root `package.json` is the orchestrator; almost every developer command is `npm run <script>` at the repo root, which `cd`s into the right workspace. `Makefile` is a thin alias layer over those npm scripts.
 

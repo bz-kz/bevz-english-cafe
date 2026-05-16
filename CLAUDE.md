@@ -55,16 +55,30 @@ The backend is intentionally layered. Respect the direction of dependencies (out
 ```
 api/endpoints      →  services        →  domain/entities + value_objects
 api/schemas        →  domain/repositories (interfaces)
-                       ↑ implemented by
-                   infrastructure/repositories  (FirestoreContactRepository)
+                       ↑ implemented by                domain/services (e.g. quota_expiry.py)
+                   infrastructure/repositories  (Firestore{Contact,Booking,LessonSlot,
+                                                  MonthlyQuota,User,ProcessedEvent}Repository)
                    infrastructure/event_bus     (in-memory pub/sub)
                    infrastructure/database      (firestore_client.py — AsyncClient factory)
                    infrastructure/di/container  (composition root)
 ```
 
+`app/main.py` registers **6 routers**:
+
+| Router | Prefix(es) |
+|---|---|
+| `contact` | `/api/v1/contacts` |
+| `users` | `/api/v1/users` |
+| `lesson_slots` | `/api/v1/lesson-slots` (+ admin slot management) |
+| `bookings` | `/api/v1/bookings`, `/api/v1/users/me/bookings` |
+| `admin` | `/api/v1/admin/*` (force-book / cancel / users) |
+| `billing` | `/api/v1/billing/checkout|portal|webhook` |
+
+`app/services/` holds the application services behind these endpoints (`contact` / `booking_service.py` / `stripe_service.py` / `user_service.py`); pure domain logic that isn't tied to a repository lives in `app/domain/services/` (e.g. `quota_expiry.py`).
+
 Domain entities (`app/domain/entities/contact.py`) raise `DomainEvent`s; the `InMemoryEventBus` dispatches them to handlers registered in `infrastructure/event_handlers/`. Domain enums live in `app/domain/enums/`. The `Container` in `app/infrastructure/di/container.py` is the composition root and holds singletons (event_bus, email_service, handlers); repositories are composed per-request in endpoint dependencies.
 
-`app/api/endpoints/contact.py:get_contact_service` resolves `EmailService` from `container.email_service()` and constructs `FirestoreContactRepository(get_firestore_client())` + `ContactService`. Add new endpoints with the same pattern. `get_firestore_client()` returns an `AsyncClient` singleton; in dev/test it auto-detects `FIRESTORE_EMULATOR_HOST`.
+`app/api/endpoints/contact.py:get_contact_service` is one example of the per-request DI pattern the endpoints follow: it resolves `EmailService` from `container.email_service()` and constructs `FirestoreContactRepository(get_firestore_client())` + `ContactService`. Add new endpoints with the same pattern. `get_firestore_client()` returns an `AsyncClient` singleton; in dev/test it auto-detects `FIRESTORE_EMULATOR_HOST`.
 
 The `Container._setup_services` branches `MockEmailService` (dev/test or empty SMTP_USER) vs `SMTPEmailService` (production) based on `settings.environment`.
 
@@ -80,10 +94,14 @@ Standard Next.js 14 App Router layout under `frontend/src/app/`. Cross-cutting c
 - `src/stores/` — Zustand stores (`notificationStore`).
 - `src/schemas/contact.ts` — zod schema for form validation; mirrors `backend/app/api/schemas/contact.py` Pydantic (keep in sync manually).
 - `src/components/sections/` — page-level marketing sections composed in `app/page.tsx`.
-- `src/components/forms/ContactForm.tsx` — the only real form; validates via the zod schema, posts to backend `/api/v1/contacts`.
+- `src/components/forms/ContactForm.tsx` and `ReviewForm.tsx` — the two real forms; `ContactForm` validates via the zod schema and posts to backend `/api/v1/contacts`.
 - `src/data/teachers.ts` + `src/types/teacher.ts` — shared marketing data (consumed by `TeachersSection` and `TeachersGridSection`).
 
 `next.config.js` proxies `/api/:path*` → `${NEXT_PUBLIC_API_URL}/api/:path*`. `@next/bundle-analyzer` is wired via `ANALYZE=true npm run build`.
+
+### Stripe subscriptions (sub-project 4c)
+
+Three plan tiers (`light` / `standard` / `intensive`). Lesson credits live in the multi-doc `monthly_quota` collection: each grant is its own document keyed `{uid}_{granted_at:%Y%m%d%H%M%S%f}`, credits expire 2 months after grant, and consumption is FIFO (oldest non-expired grant first). Grants are webhook-driven via `/api/v1/billing/webhook` (Stripe subscription events); plan changes go through the Stripe Customer Portal (`/api/v1/billing/portal`). The whole feature is gated client-side by `NEXT_PUBLIC_STRIPE_ENABLED`.
 
 ### Shared types
 
@@ -100,7 +118,7 @@ Standard Next.js 14 App Router layout under `frontend/src/app/`. Cross-cutting c
 
 - Frontend → **Vercel**. Root directory is `frontend/`. `vercel.json` at repo root is informational; Vercel uses per-app config. Env vars are managed via HCP workspace `english-cafe-prod-vercel`'s `env_vars` HCL variable (`terraform/envs/prod/vercel/`).
 - Backend → **GCP Cloud Run** (`asia-northeast1`), service `english-cafe-api`, custom domain `https://api.bz-kz.com`. Image lives in Artifact Registry `asia-northeast1-docker.pkg.dev/english-cafe-496209/english-cafe/api:<tag>`. Terraform stack: `terraform/envs/prod/cloudrun/`. **Image swaps go through `gcloud run services update`**, not terraform — the module's `lifecycle.ignore_changes` excludes `containers[0].image` so CD doesn't fight terraform.
-- Data → **Firestore Native** (`asia-northeast1`), database `(default)`, `contacts` collection. `deletion_policy = "ABANDON"` on the terraform resource so a destroy can't wipe data.
+- Data → **Firestore Native** (`asia-northeast1`), database `(default)`. Collections in use: `contacts`, `users`, `lesson_slots`, `bookings`, `monthly_quota`, `processed_stripe_events`. `deletion_policy = "ABANDON"` on the terraform resource so a destroy can't wipe data.
 - Auth → **GCP Workload Identity Federation** trusts HCP Terraform's OIDC issuer. Per-stack runner SA `hcp-terraform-runner@english-cafe-496209.iam.gserviceaccount.com`. No SA JSON keys.
 - Cost cap → ¥2000/month budget; Cloud Function disables billing on the project when the threshold is crossed (`terraform/envs/prod/billing/`).
 - Production bootstrap procedure (one-time): [`docs/cloud-run-bootstrap.md`](./docs/cloud-run-bootstrap.md).

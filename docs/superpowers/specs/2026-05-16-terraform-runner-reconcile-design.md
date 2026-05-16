@@ -97,21 +97,25 @@ variable "allowed_workspaces" {
 
 ### `terraform/README.md` — 既知例外を明記 (Q-B2=b)
 
-WIF / bootstrap セクションに次の趣旨を追記:
+**アンカー**: 既存の「Billing killswitch (one-time bootstrap)」節(billing が Local-execution + 人間の `roles/billing.user` で運用される旨を既述)の末尾、もしくはその直後に新規 `### WIF coverage exceptions` サブ節として、`---` 区切りの前に追記。次の趣旨:
 
-> `english-cafe-prod-billing`（billing-killswitch、`google_billing_account_iam_member` + `google_billing_budget` を含む）と `english-cafe-prod-monthly-quota` は HCP runner-WIF 経由で apply されていない（billing-account スコープ IAM は project-level runner role で表現できないため手動 / ローカル ADC で apply 運用）。これらを WIF 化する場合は (1) `allowed_workspaces` に追加、(2) billing-account レベルで runner SA に `roles/billing.admin` 等を別途付与（wif stack の bootstrap が billing-account admin 必須になる）が必要。現状は意図された既知例外。
+> `english-cafe-prod-billing`（billing-killswitch、`google_billing_account_iam_member` + `google_billing_budget` を含む）と `english-cafe-prod-monthly-quota` は HCP runner-WIF 経由で apply されていない（billing-account スコープ IAM は project-level runner role で表現できないため手動 / ローカル ADC で apply 運用。discover 2026-05-16 で principalSet に両 workspace が不在と確認済）。これらを WIF 化する場合は (1) `allowed_workspaces` に追加、(2) billing-account レベルで runner SA に `roles/billing.admin` 等を別途付与（wif stack の bootstrap が billing-account admin 必須になる）が必要。現状は意図された既知例外。
 
-## Safety / behavior
+## Safety / behavior (plan semantics — 正確版)
 
-- `google_project_iam_member` / `google_service_account_iam_member` は **非 authoritative**（個別 member 単位、binding 全体を所有しない）。default を discover 実態に一致させても、対象 role/workspace は既に gcloud 付与済なので `terragrunt plan` は **新規付与 0・削除 0**。terraform state に既存 grant を取り込む（import 相当の no-op）だけ。
-- 既存宣言 7 role / 3 workspace は保持。追加分は実在するものだけ。over-declare（実在しない role/workspace を宣言）はしない — 投機的付与を避け「宣言==実態」を厳守。
+- `google_project_iam_member` / `google_service_account_iam_member` は **非 authoritative**（個別 member 単位、binding 全体を所有しない）。両者 `for_each = toset(var.*)`。
+- **重要 (誤解しやすい点)**: `for_each` の set を増やすと terraform は新キーごとに **`+ create` を plan する**。`terragrunt plan` の出力は **`Plan: 8 to add, 0 to change, 0 to destroy`**(`runner_iam_roles` 7 新キー + `allowed_workspaces` 1 新キー = 計 8)。terraform は `iam_member` のリモート IAM を refresh して「既存だから no-op」とは**しない**。これは **import でも no-op plan でもない**。
+- 安全である根拠は plan ではなく **apply の冪等性**: 対象 role/workspace は既に gcloud で付与済 → `iam_member`（非 authoritative）の create は「既存 member を再作成」になりエラーにならず**成功（実 IAM 不変）**。よって 8 creates を apply しても新規付与は実質発生せず（既に存在）、削除も発生しない。
+- 既存宣言 7 role / 3 workspace は保持。追加分は discover 実在のものだけ。over-declare（実在しない role/workspace を宣言）はしない — 投機的付与を避け「宣言==実態」を厳守。
 - 以降、scheduler-slots 系 role/workspace が wif stack の宣言で再現可能になり、imperative gcloud は不要。
 
 ## Error handling / risk
 
 | リスク | 対応 |
 |---|---|
-| plan に予期せぬ create/destroy が出る | apply 前に `terragrunt plan` を必ず人間が確認。create/destroy が出たら（= discover と乖離）apply 中止し再 discover |
+| 期待外の plan 内容 | **期待値は `Plan: 8 to add, 0 to change, 0 to destroy`**。8 creates は全て `google_project_iam_member.runner_roles["roles/..."]`(7)と `google_service_account_iam_member.wif_runner["english-cafe-prod-scheduler-slots"]`(1)のみ。**中止条件**: change≠0 / destroy≠0 / create がこの 2 つの for_each map 以外のリソースに及ぶ / create 総数≠8 のいずれか(= discover との乖離 or stale tree)。8 creates 自体は正常 |
+| stale branch (#5) | **実装 branch は post-#20 origin/main から作成必須**(PR #20 は merge 済 = commit `7183d9c`)。古いツリーで wif stack を apply すると #20 の `deployer` SA / github provider を巻き戻す。plan は post-#20 ツリーで生成。`git log` に #20 マージが含まれることを確認 |
+| #20 の deployer SA grant も create で出る | #20 が追加した `google_project_iam_member`(deployer_roles)も、その workspace が未 apply なら create として並ぶ。post-#20 ツリーで plan すれば #20 由来 create は #20 の wif apply 時に解決済のはず。乖離時は再 discover |
 | discover ダンプが古い | spec に取得日 (2026-05-16) を明記。apply 直前に再 discover 推奨(ops 手順) |
 | monthly-quota/billing が将来 WIF 必要に | README の既知例外手順に従い別タスク化(本スコープ外) |
 
@@ -120,7 +124,7 @@ WIF / bootstrap セクションに次の趣旨を追記:
 - `cd terraform/modules/gcp-wif && terraform init -backend=false -input=false && terraform validate && terraform fmt -check -recursive`(構文・型・整形)
 - 静的: `variables.tf` の 2 default が discover 14 role / 4 workspace と完全一致(コメント以外)
 - **cross-cutting-reviewer 必須**(infra 変更、CLAUDE.md 規定): 差分が `variables.tf` の 2 default + `README.md` 追記のみで、`main.tf`/`outputs.tf`/`terragrunt.hcl` に diff なし、`monitoring.notificationChannelEditor`/monthly-quota/billing を宣言していないこと、既存 7 role / 3 workspace が byte 維持されていることを確認
-- ops(私側不可・ユーザー操作): `terragrunt apply` 前に `terragrunt plan`(`english-cafe-prod-wif`)で「**add 0 / change 0 / destroy 0**(または既存 grant の state 取り込みのみ)」を目視確認 → apply
+- ops(私側不可・ユーザー操作): 実装 branch を **post-#20 origin/main** から作成(`git log` に PR #20 マージ `7183d9c` を確認)→ `terragrunt plan`(`english-cafe-prod-wif`)で **`Plan: 8 to add, 0 to change, 0 to destroy`**、8 creates が全て `runner_roles[...]`(7)+`wif_runner["...scheduler-slots"]`(1)のみであることを目視確認(change/destroy が出る・他リソースに create が及ぶ・総数≠8 なら中止して再 discover)→ apply(冪等、実 IAM 不変)
 
 ## Files
 
@@ -142,5 +146,6 @@ WIF / bootstrap セクションに次の趣旨を追記:
 
 ## Migration / Rollback
 
-- 変更は variables default の値拡張 + README 追記のみ。`iam_member` 非 authoritative により apply は state 取り込み（実害なし）。
-- rollback: `git revert`。実 IAM は gcloud 付与のまま残る（terraform が member を削除しない）ため本番影響なし。
+- 変更は variables default の値拡張 + README 追記のみ。実装 branch は post-#20 origin/main から作成。
+- apply は plan 上 8 creates だが、対象 grant は既に GCP に存在するため `iam_member`（非 authoritative）の create は冪等成功・実 IAM 不変（新規付与・削除ともに実質ゼロ）。
+- rollback: `git revert`。terraform state からは新キーが消えるが member は削除されない（非 authoritative）ため実 IAM・本番影響なし。

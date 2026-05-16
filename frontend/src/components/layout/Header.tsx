@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useAuthStore } from '@/stores/authStore';
 
 const Header = () => {
-  const { user, isAdmin, signOut } = useAuthStore();
+  const { user, isAdmin, signOut, loading } = useAuthStore();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
@@ -95,14 +95,23 @@ const Header = () => {
                     >
                       マイページ
                     </Link>
-                    {isAdmin && (
-                      <Link
-                        href="/admin/lessons"
-                        onClick={closeUserMenu}
-                        className="block px-3 py-2 text-sm hover:bg-gray-50"
+                    {loading ? (
+                      <span
+                        aria-disabled="true"
+                        className="block cursor-default px-3 py-2 text-sm text-gray-400"
                       >
                         Admin
-                      </Link>
+                      </span>
+                    ) : (
+                      isAdmin && (
+                        <Link
+                          href="/admin/lessons"
+                          onClick={closeUserMenu}
+                          className="block px-3 py-2 text-sm hover:bg-gray-50"
+                        >
+                          Admin
+                        </Link>
+                      )
                     )}
                     <button
                       type="button"

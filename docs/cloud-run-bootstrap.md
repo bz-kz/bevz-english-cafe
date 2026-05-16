@@ -286,7 +286,7 @@ If 404 or 502: check Cloud Run logs:
 gcloud run services logs read english-cafe-api --region asia-northeast1 --limit 50
 ```
 
-> **Container failed to start (gotcha)**: if the revision fails with `did not listen on PORT=8000`, the most likely cause in this repo is that the new revision is using SQLAlchemy as backend but Postgres isn't reachable from Cloud Run (we have no Postgres). Either flip `REPOSITORY_BACKEND` to `firestore` (Phase C step below) before the first deploy, or accept the failed revision and immediately roll forward.
+> **Container failed to start (gotcha)** — ⚠️ **HISTORICAL, no longer applicable**: this described a SQLAlchemy-vs-Postgres failure mode that no longer exists. The SQLAlchemy code path and the `REPOSITORY_BACKEND` env var were removed in Phase D — Firestore is the only backend and there is no env toggle. The advice to "flip `REPOSITORY_BACKEND` to `firestore`" is **not actionable**; ignore it. If a revision fails with `did not listen on PORT=8000` today, debug the Firestore client / IAM / Dockerfile instead.
 >
 > Other gotchas we've actually hit and fixed in the Dockerfile:
 > - `pyproject.toml`'s `readme = "../README.md"` references a path outside the Docker build context → drop the `readme` field
@@ -307,13 +307,24 @@ gcloud run services logs read english-cafe-api --region asia-northeast1 --limit 
 
 ## 9. Phase C cutover — flip the repository backend
 
-The backend is now serving, but still configured to use SQLAlchemy (Postgres is unreachable from Cloud Run anyway, so the contact endpoint would 500 if hit). Flip to Firestore:
+> ⚠️ **HISTORICAL — NO LONGER APPLICABLE. Do not perform this step.**
+> The SQLAlchemy code path and the `REPOSITORY_BACKEND` env var were fully
+> removed in Phase D. Firestore is the only backend and **no env toggle
+> exists**. The `REPOSITORY_BACKEND=firestore` instruction and the
+> `terragrunt.hcl` `env_vars` edit below are kept solely as a historical
+> record of the original migration — they are **not actionable** on the
+> current codebase. For a fresh setup, skip directly to step 10. The only
+> still-relevant part of this step is the curl smoke test at the end, which
+> works unchanged.
 
-On `english-cafe-prod-cloudrun`, update the `env_vars` Terraform Variable. (It's currently set in `terragrunt.hcl` as an input. If you want to keep the source-of-truth in code, edit the file and commit; if you want to override per-environment without a commit, add an `env_vars` HCL Terraform Variable on the workspace.)
+~~The backend is now serving, but still configured to use SQLAlchemy (Postgres is unreachable from Cloud Run anyway, so the contact endpoint would 500 if hit). Flip to Firestore:~~
 
-Recommended: edit `terraform/envs/prod/cloudrun/terragrunt.hcl` so the input becomes:
+~~On `english-cafe-prod-cloudrun`, update the `env_vars` Terraform Variable. (It's currently set in `terragrunt.hcl` as an input. If you want to keep the source-of-truth in code, edit the file and commit; if you want to override per-environment without a commit, add an `env_vars` HCL Terraform Variable on the workspace.)~~
+
+~~Recommended: edit `terraform/envs/prod/cloudrun/terragrunt.hcl` so the input becomes:~~
 
 ```hcl
+# HISTORICAL — REPOSITORY_BACKEND no longer exists; do not apply this.
 env_vars = {
   GCP_PROJECT_ID     = local.env.locals.gcp_project_id
   REPOSITORY_BACKEND = "firestore"
@@ -321,9 +332,9 @@ env_vars = {
 }
 ```
 
-Commit, push, then `terragrunt apply`.
+~~Commit, push, then `terragrunt apply`.~~
 
-Submit a test contact via curl:
+Submit a test contact via curl (this part is still valid):
 
 ```bash
 curl -X POST https://api.bz-kz.com/api/v1/contacts/ \

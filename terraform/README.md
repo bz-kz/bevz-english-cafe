@@ -6,9 +6,11 @@
 |---|---|---|---|
 | `terraform/envs/prod/vercel` | english-cafe-prod-vercel | Vercel project, env vars, custom domain | (none) |
 | `terraform/envs/prod/wif` | english-cafe-prod-wif | GCP Workload Identity Pool for HCP→GCP auth | (none) |
-| `terraform/envs/prod/firestore` | english-cafe-prod-firestore | Firestore Native DB in asia-northeast1 | wif |
+| `terraform/envs/prod/firestore` | english-cafe-prod-firestore | Firestore Native DB in asia-northeast1 + composite indexes for lesson-booking queries | wif |
 | `terraform/envs/prod/cloudrun` | english-cafe-prod-cloudrun | Cloud Run service + Artifact Registry + domain mapping | wif, firestore |
 | `terraform/envs/prod/billing` | english-cafe-prod-billing | Monthly cost cap + killswitch (disables billing at threshold) | (none) |
+| `terraform/envs/prod/monthly-quota` | english-cafe-prod-monthly-quota | Cloud Function (`cloud-function-monthly-quota-grant`) — cron `0 0 1 * *` JST, grants `monthly_quota` docs | wif, firestore |
+| `terraform/envs/prod/scheduler-slots` | english-cafe-prod-scheduler-slots | Cloud Function (`cloud-function-slot-generator`) — cron `0 0 * * *` JST, generates `lesson_slots` | wif, firestore |
 
 ### Billing killswitch (one-time bootstrap)
 
@@ -85,7 +87,7 @@ The `wif` stack provisions both the Workload Identity Pool **and** the runner SA
    | `TFC_GCP_WORKLOAD_PROVIDER_NAME` | `provider_name` output |
    | `TFC_GCP_RUN_SERVICE_ACCOUNT_EMAIL` | `runner_service_account_email` output |
 
-3. **`firestore` stack**: `terragrunt apply` from HCP. Creates the Firestore Native DB in `asia-northeast1`.
+3. **`firestore` stack**: `terragrunt apply` from HCP. Creates the Firestore Native DB in `asia-northeast1` and the composite indexes required by the lesson-booking queries. The repo-root `firestore.indexes.json` additionally holds the `users` and `monthly_quota` composite indexes (the `monthly_quota` `user_id ASC, year_month ASC` index backs the monthly-quota cron's `.where("user_id"==).where("year_month"==)` query).
 4. **`cloudrun` stack**: requires `image` workspace variable (Terraform variable, not env var). For initial bootstrap, set `TF_VAR_image=us-docker.pkg.dev/cloudrun/container/hello` so the service comes up green. Phase C replaces it with the real Artifact Registry URI after the first image push.
 5. **`vercel` stack** (already exists): in Phase C, add `NEXT_PUBLIC_API_URL=https://api.bz-kz.com` to the `env_vars` workspace HCL map.
 6. **DNS**: after cloudrun apply, the `custom_domain_dns_records` output lists the records to add for `api.bz-kz.com` at the DNS provider. Wait for propagation + Google-managed cert provisioning (up to ~15 min).
@@ -252,9 +254,8 @@ If apply fails with `error linking git repo: ... you need to install the GitHub 
 
 ## Future stacks
 
-Layout reserves `envs/prod/<stack>/` for future additions:
+`envs/prod/cloudrun/` is **active and deployed** (see the stack inventory above), not a future stack. Layout still reserves `envs/prod/<stack>/` for further additions:
 
-- `envs/prod/cloudrun/` — Python service on Google Cloud Run
 - `envs/prod/github/` — repo settings, branch protection
 
 Each gets its own HCP workspace (auto-created on `terragrunt init`, named `english-cafe-prod-<stack>`) and its own state. Cross-stack references use Terragrunt `dependency` blocks.

@@ -16,6 +16,31 @@
 
 ---
 
+## SINGLE-PR EXECUTION (supersedes the PR-1/PR-2 split — 2026-05-16, user-approved option A)
+
+PR-1 implementation revealed the split's premise is invalid: `frontend/src/lib/firebase.ts:5,12` runs `getAuth()` at module top-level with `NEXT_PUBLIC_FIREBASE_API_KEY!`, imported via `authStore.ts → app/layout.tsx` (root layout) — and `docker-compose.yml`'s `frontend` service has NO Firebase env (no `.env.local`). So **every route, public included, SSR-500s** with `auth/invalid-api-key`. Public specs cannot run without the Firebase bootstrap; the "PR-1 = zero-infra, standalone" rationale is gone.
+
+**Now: one PR `feat/e2e`.** Reuse the existing `feat/e2e-public` branch (already holds the 7 verified public-spec commits `9f456ec`…`a65866c` + cherry-picked docs) AS the single PR branch — rename to `feat/e2e` (`git branch -m feat/e2e-public feat/e2e`). Do NOT cut a separate PR-2 branch. One cross-cutting-reviewer gate on the whole PR. No merge.
+
+**Execution order on `feat/e2e` (task bodies below remain authoritative for file content; only the PR boundary changes):**
+1. Tasks 1–7 — DONE (public specs committed; correct vs real markup; `contact` submit-error selector hardened to `h3.text-red-800` w/ `hasText:'送信エラー'`). No rework.
+2. Task 8 — firebase.ts gated `connectAuthEmulator` + `firebase.json` + `.firebaserc`.
+3. Task 9 (AMENDED) — docker-compose: add the `firebase-auth-emulator` service (healthcheck) **and** add to the **`frontend` service `environment`** (this is the corrected env location — Playwright reuses the docker frontend, so `webServer.env` alone does not fix the SSR 500):
+   ```yaml
+   # frontend.environment (additions)
+   - NEXT_PUBLIC_FIREBASE_API_KEY=demo-api-key
+   - NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=demo-english-cafe.firebaseapp.com
+   - NEXT_PUBLIC_FIREBASE_PROJECT_ID=demo-english-cafe
+   - NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST=localhost:9099
+   - NEXT_PUBLIC_STRIPE_ENABLED=true
+   ```
+   plus the backend C1 env (`GCP_PROJECT_ID` & `GOOGLE_CLOUD_PROJECT` = `demo-english-cafe`, `FIREBASE_AUTH_EMULATOR_HOST=firebase-auth-emulator:9099`). After this, re-run the **full PR-1 public suite** — it must now actually pass (previously 0 ran). This is the verification that the bootstrap fix works.
+4. Task 10 — globalSetup (clear→seed, timestampValue) + `playwright.config.ts` (`globalSetup`, projects testMatch; `webServer.env` optional duplicate for non-docker fallback).
+5. Task 11 — auth fixture (real UI login).
+6. Tasks 12–14 — mypage / booking / admin specs; Task 14 also updates README + CLAUDE.md, runs the FULL suite (public + authed), production-safety + scope assertions, then **cross-cutting-reviewer gate**, then **one** `gh pr create` for `feat/e2e` (title e.g. `feat(e2e): comprehensive Playwright suite + Firebase auth emulator`), no merge.
+
+Ignore the per-phase `gh pr create` in Task 7 and the separate PR-2 `gh pr create` wording — there is exactly ONE PR (`feat/e2e`) created at the end of Task 14, after the gate. The Task 7 "scope = only frontend/e2e" assertion is also superseded (the single PR legitimately includes firebase.ts/docker-compose/firebase.json).
+
 ## File Structure
 
 ### PR-1 — public e2e (no infra change)

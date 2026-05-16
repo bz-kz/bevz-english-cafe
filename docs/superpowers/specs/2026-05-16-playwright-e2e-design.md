@@ -28,6 +28,34 @@
 | **Auth fixture 方式 (C2)** | storageState 不採用に加え `page.evaluate` での app `firebaseAuth` 再利用も不採用（module-scope export で page realm から到達不可）。**実 UI ログイン**（`/login` フォーム入力→submit、アプリ自身の emulator 配線済インスタンスを行使）を fixture の機構とする |
 | CI | e2e の CI 統合は本スコープ外（既存 CI #20 は backend のみ）。ローカル/手動実行前提。将来課題として README + CLAUDE.md に明記 |
 
+## DESIGN CORRECTION — 単一 PR へ統合（2026-05-16、PR-1 実装で判明。以降これが正、旧「2 PR 分割」関連を supersede）
+
+**前提誤り**: `frontend/src/lib/firebase.ts:5,12` は module top-level で `apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY!`（非 null）→ `getAuth(firebaseApp)`。これが `authStore.ts` → `app/layout.tsx`（root layout＝全ルート SSR）の import chain にある。`docker-compose.yml` の `frontend` サービス env は `NODE_ENV`/`NEXT_PUBLIC_API_URL`/`BACKEND_URL` のみで **Firebase env を持たず**、`frontend/.env.local` も無い。→ **公開ページ含む全ルートが SSR 500**（`auth/invalid-api-key`）。「PR-1=公開・インフラ変更ゼロ・docker compose だけで実行可」は**不成立**。2 PR 分割の根拠消滅。
+
+**決定（ユーザー承認: A）**: **単一 PR `feat/e2e`** に統合。旧「2 PR 分割」「PR-1/PR-2 Files 分割」「PR 依存順 (M1)」の構造は supersede（各ファイルの spec コード/seed/fixture/env 値の中身は有効）。cross-cutting-reviewer gate は統合 PR に 1 回（infra 含むため必須）。マージなし。
+
+**env 投入箇所の訂正**: Playwright `webServer.reuseExistingServer:true` + docker-compose が :3010 保持 → Playwright は自前 dev server を起動せず **docker-compose の frontend を使う**（自前は `EADDRINUSE :3010`）。よって e2e Firebase env は **`docker-compose.yml` の `frontend` サービス `environment`** に置く（playwright `webServer.env` だけでは docker 経路に効かない）:
+```yaml
+# docker-compose.yml frontend.environment（追加）
+- NEXT_PUBLIC_FIREBASE_API_KEY=demo-api-key                 # 任意の非空。emulator は値非検証。空/未定義だと getAuth が throw
+- NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=demo-english-cafe.firebaseapp.com
+- NEXT_PUBLIC_FIREBASE_PROJECT_ID=demo-english-cafe          # C1: project 統一
+- NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST=localhost:9099     # ブラウザ(Playwright on host)→docker 公開 9099
+- NEXT_PUBLIC_STRIPE_ENABLED=true
+```
+**host nuance**: SSR（docker frontend コンテナ内）は firebase.ts を import するが公開ページ描画で auth ネットワーク呼び出しをしない（`getAuth()` は非空 apiKey で throw せず、`connectAuthEmulator` は config 設定のみ）。実 auth 操作（login fixture）はブラウザ側で `localhost:9099` の docker 公開 emulator に到達。ゆえに `AUTH_EMULATOR_HOST=localhost:9099`（ブラウザ基準）が正、SSR は公開フローで dial しない。
+
+**単一 PR 構成（branch `feat/e2e`）**: 既コミット済の公開 spec 7 ファイル（helpers/`marketing|contact|auth-pages|browse|book-unauth|smoke`.spec.ts/README/scaffold 削除、実マークアップ準拠検証済、`contact` 送信エラーのみ `h3.text-red-800` へ厳密化）をそのまま採用 + 以下を同 PR に追加:
+- `frontend/src/lib/firebase.ts`: env-gated `connectAuthEmulator`（唯一の `frontend/src/` 変更）
+- `docker-compose.yml`: 上記 frontend Firebase env + backend C1 env（`GCP_PROJECT_ID`&`GOOGLE_CLOUD_PROJECT`=`demo-english-cafe`）+ `firebase-auth-emulator` サービス（healthcheck 付）
+- `firebase.json` / `.firebaserc`
+- `frontend/playwright.config.ts`: `globalSetup`、`projects` testMatch（公開=全ブラウザ/認証=Chromium）
+- `frontend/e2e/global-setup.ts`（clear→seed, timestampValue）, `frontend/e2e/helpers/auth.ts`（実 UI login fixture）
+- `frontend/e2e/mypage|booking|admin.spec.ts`
+- `frontend/e2e/README.md` / `CLAUDE.md` 追記
+
+以降の「### PR-1 …/### PR-2 …/### PR 依存順」は **PR 分割の構造のみ無効**、内容（コード/seed/fixture/env）は単一 PR `feat/e2e` の一部として有効。
+
 ## Architecture
 
 ### 共通: 実行前提・ヘルパ

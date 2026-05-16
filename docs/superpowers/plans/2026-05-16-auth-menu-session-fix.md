@@ -36,7 +36,7 @@ Expected: `post-#24 OK`; the file is the 35-line version with the `if (typeof wi
 
 - [ ] **Step 2: Replace the `onAuthStateChanged` block**
 
-Replace the entire `if (typeof window !== 'undefined') { onAuthStateChanged(...) }` block (lines ≈25–34) with:
+Anchor on the LITERAL block, not line numbers (review fix: the block is the file's final `if (typeof window !== 'undefined') { … }` ending at the last `}` of the file — do not trust a numeric range). Replace that entire trailing block (from `if (typeof window !== 'undefined') {` through its closing brace at EOF) with the following; the two new module-scope declarations (`ABSOLUTE_SESSION_MS`, `expiryTimer`) go immediately BEFORE that `if`:
 
 ```ts
 const ABSOLUTE_SESSION_MS = 24 * 60 * 60 * 1000;
@@ -106,7 +106,7 @@ Confirm how `isAdmin` (and `signOut`/`closeUserMenu`) are obtained from `useAuth
 
 - [ ] **Step 2: Pull `loading` from the store**
 
-Wherever `isAdmin` is read from `useAuthStore` (e.g. `const isAdmin = useAuthStore(s => s.isAdmin);` or a destructure), also read `loading` the same way (e.g. add `const loading = useAuthStore(s => s.loading);`, matching the file's existing selector style — do NOT change the existing `isAdmin`/`signOut` reads, just add `loading`).
+Verified: `Header.tsx` uses a full-store destructure (≈ line 8): `const { user, isAdmin, signOut } = useAuthStore();`. Add `loading` to that same destructure → `const { user, isAdmin, signOut, loading } = useAuthStore();`. Do NOT change to a selector or alter the other reads. (If the actual destructure list differs, add `loading` to it verbatim in the same form.)
 
 - [ ] **Step 3: Replace the Admin conditional with the stable version**
 
@@ -149,7 +149,50 @@ git commit -m "fix(header): stable disabled Admin placeholder while auth resolve
 
 ---
 
-## Task 3: Verify + PR (no merge)
+## Task 3: Tests (required — locks the race fix + timer; review's biggest-risk item)
+
+**Files:** Modify `frontend/src/components/layout/__tests__/Header.test.tsx`; Create `frontend/src/stores/__tests__/authStore.test.ts`
+
+- [ ] **Step 1: Header test — include `loading`, cover the placeholder/swap**
+
+The existing mock (≈ L7-12) returns `{ user, isAdmin:false, signOut }` with NO `loading` (tests currently pass by luck — `loading` undefined → falsy). Update the `useAuthStore` mock to be parameterizable and add:
+- `loading:true` (any `isAdmin`) → a disabled `Admin` is rendered as a non-link: assert `screen.getByText('Admin')` exists AND `screen.queryByRole('link', { name: 'Admin' })` is `null` (and/or the element has `aria-disabled="true"`).
+- `loading:false, isAdmin:true` → assert `screen.getByRole('link', { name: 'Admin' })` has `href="/admin/lessons"`.
+- `loading:false, isAdmin:false` → assert no `Admin` text/link.
+Keep the existing 6 tests green (extend the mock so they still pass — pass `loading:false` for those). Match the file's existing mocking approach (`jest.mock('@/stores/authStore', …)`); do not rewrite unrelated tests.
+
+- [ ] **Step 2: authStore absolute-expiry test**
+
+Create `frontend/src/stores/__tests__/authStore.test.ts`. Because `authStore.ts` subscribes `onAuthStateChanged` at module import (side-effect), mock `firebase/auth` so `onAuthStateChanged` captures the callback, and `signOut` is a `jest.fn()`; mock `@/lib/firebase`. Use `jest.useFakeTimers()`. Pattern:
+```ts
+jest.mock('@/lib/firebase', () => ({ firebaseAuth: {} }));
+const signOut = jest.fn().mockResolvedValue(undefined);
+let cb: (u: unknown) => unknown;
+jest.mock('firebase/auth', () => ({
+  onAuthStateChanged: (_a: unknown, fn: (u: unknown) => unknown) => { cb = fn; return () => {}; },
+  signOut: (...a: unknown[]) => signOut(...a),
+}));
+```
+- Test A — stale: `jest.useFakeTimers()`; `await import('@/stores/authStore')`; invoke `cb({ metadata: { lastSignInTime: new Date(Date.now() - 25*3600*1000).toUTCString() }, getIdTokenResult: async () => ({ claims: {} }) })`; `await Promise.resolve()` flushes; assert `signOut` was called (immediate).
+- Test B — fresh: invoke `cb` with `lastSignInTime` = now; assert `signOut` NOT yet called; `jest.advanceTimersByTime(24*3600*1000)`; assert `signOut` called once (scheduled).
+- Test C — null user: invoke `cb(null)`; assert no throw, `signOut` not called, store `loading:false`.
+Use `jest.resetModules()` + dynamic `import()` per test so the module-load subscription re-registers cleanly. If — and only if — the import-time side-effect genuinely cannot be driven without refactoring `authStore.ts` (which is OUT OF SCOPE), STOP and report BLOCKED with the specific obstacle rather than refactoring production code or weakening the test.
+
+- [ ] **Step 3: Run the new tests**
+
+Run: `cd frontend && npm test -- --runInBand --watchAll=false Header authStore`
+Expected: the new Header assertions + authStore A/B/C pass.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add frontend/src/components/layout/__tests__/Header.test.tsx frontend/src/stores/__tests__/authStore.test.ts
+git commit -m "test(auth): cover Admin placeholder/swap + 24h absolute-expiry signOut"
+```
+
+---
+
+## Task 4: Verify + PR (no merge)
 
 - [ ] **Step 1: Full frontend gate**
 
@@ -166,7 +209,7 @@ Run:
 cd "$(git rev-parse --show-toplevel)"
 git diff --name-only origin/main..HEAD | sort
 ```
-Expected: exactly `frontend/src/stores/authStore.ts`, `frontend/src/components/layout/Header.tsx`, plus `docs/superpowers/**`. NO `firebase.ts`, no backend/shared/terraform/other.
+Expected: exactly `frontend/src/stores/authStore.ts`, `frontend/src/components/layout/Header.tsx`, `frontend/src/components/layout/__tests__/Header.test.tsx`, `frontend/src/stores/__tests__/authStore.test.ts`, plus `docs/superpowers/**`. NO `firebase.ts`, no backend/shared/terraform/other.
 
 - [ ] **Step 3: Push + PR (no merge)**
 
@@ -181,14 +224,16 @@ Two auth fixes (frontend-only, 2 files):
 ## What changed
 - `stores/authStore.ts`: `ABSOLUTE_SESSION_MS` + module `expiryTimer`; `onAuthStateChanged` clears any prior timer, immediate `signOut` if `age >= 24h` (logged-out state set first), else schedules `signOut` at the remaining time; NaN-guarded (fail open). Lines 1–23 (imports/store) unchanged.
 - `components/layout/Header.tsx`: read `loading`; Admin item = disabled grey placeholder while `loading`, active `<Link>` when resolved-admin, hidden for non-admins.
+- `__tests__/Header.test.tsx` (updated) + `stores/__tests__/authStore.test.ts` (new): cover the placeholder→Link swap and the immediate/scheduled 24h `signOut`.
 
 ## Process
-investigate (frontend-explorer root-cause) → user decisions (Issue1 placeholder approach; Issue2 absolute 24h) → spec → independent review → plan → independent review → subagent impl.
+investigate (frontend-explorer root-cause) → user decisions (Issue1 placeholder approach; Issue2 absolute 24h) → spec → independent review → plan → independent review (APPROVE-WITH-FIXES: line-anchor, concrete Header destructure, required tests) → subagent impl.
 
 ## Test plan
 - [x] `npm run lint` + `npx tsc --noEmit` clean
-- [x] `npm test` 0 NEW failures vs baseline (pre-existing firebase-jsdom suite failures unrelated; Header/authStore suites pass)
-- [x] scope = 2 frontend files (+ docs); no firebase.ts/backend/shared/terraform → no cross-cutting gate
+- [x] new Header tests (loading→span / resolved-admin→Link / non-admin→none) + authStore A/B/C (stale→immediate signOut, fresh→scheduled, null→noop) pass
+- [x] `npm test` 0 NEW failures vs baseline (pre-existing firebase-jsdom suite failures unrelated)
+- [x] scope = 4 frontend files — 2 src + 2 test (+ docs); no firebase.ts/backend/shared/terraform → no cross-cutting gate
 - [ ] (reviewer) human review before merge
 
 ## Migration / rollback
@@ -210,7 +255,8 @@ EOF
 | Header reads `loading` from store | 2 |
 | Issue 2: absolute 24h from `lastSignInTime`, activity-independent | 1 |
 | immediate signOut if past; cleared-then-rescheduled timer; NaN fail-open; logged-out state before signOut | 1 |
-| lines 1–23 of authStore unchanged; only the window block replaced | 1 |
-| frontend-only scope, no firebase.ts/backend change | 3 (scope assert) |
-| lint/tsc clean, 0 new jest failures | 1–3 |
-| no merge, independent review, no cross-cutting gate | 3 + header |
+| lines 1–23 of authStore unchanged; only the window block replaced (literal anchor) | 1 |
+| required tests: Header placeholder/swap + authStore 24h immediate/scheduled signOut | 3 |
+| frontend-only scope (2 src + 2 test), no firebase.ts/backend change | 4 (scope assert) |
+| lint/tsc clean, 0 new jest failures | 1–4 |
+| no merge, independent review, no cross-cutting gate | 4 + header |

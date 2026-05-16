@@ -18,7 +18,11 @@ locals {
 # into the firestore and cloudrun HCP workspaces as workspace variables
 # (TFC_GCP_RUN_SERVICE_ACCOUNT_EMAIL and TFC_GCP_WORKLOAD_PROVIDER_NAME).
 # See terraform/README.md for the full bootstrap sequence.
+# After apply also copy `github_wif_provider_name` and
+# `deployer_service_account_email` outputs into GitHub repo Actions
+# Variables as GCP_WIF_PROVIDER and GCP_DEPLOYER_SA (see spec Ops checklist).
 inputs = {
-  gcp_project_id   = local.env.locals.gcp_project_id
-  hcp_organization = local.env.locals.hcp_organization
+  gcp_project_id    = local.env.locals.gcp_project_id
+  hcp_organization  = local.env.locals.hcp_organization
+  github_repository = "bz-kz/bevz-english-cafe"
 }

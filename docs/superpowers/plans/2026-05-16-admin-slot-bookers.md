@@ -161,6 +161,9 @@ export default function AdminLessonsPage() {
       next.has(id) ? next.delete(id) : next.add(id);
       return next;
     });
+    // NOTE: `loading.has(id)` reads the stale closure value, so a same-tick
+    // double-click can fire two GETs. This is benign (idempotent GET,
+    // last-write-wins on setCache) — do NOT add ref/lock machinery for it.
     if (cache[id] || loading.has(id)) return;
     setLoading(prev => new Set(prev).add(id));
     try {

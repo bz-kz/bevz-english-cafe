@@ -53,3 +53,50 @@ resource "google_service_account_iam_member" "wif_runner" {
   role               = "roles/iam.workloadIdentityUser"
   member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.hcp.name}/attribute.terraform_workspace_name/${each.value}"
 }
+
+# --- GitHub Actions OIDC (sub-project A: backend CI/CD) ---
+# Second provider on the SAME pool. GCP namespaces principals per-provider, so
+# google.subject = assertion.sub on both providers does not collide (issuers
+# differ: app.terraform.io vs token.actions.githubusercontent.com). The HCP
+# provider/runner SA/attribute_condition above are intentionally untouched.
+resource "google_iam_workload_identity_pool_provider" "github" {
+  project                            = var.gcp_project_id
+  workload_identity_pool_id          = google_iam_workload_identity_pool.hcp.workload_identity_pool_id
+  workload_identity_pool_provider_id = var.github_provider_id
+  display_name                       = "GitHub Actions OIDC"
+
+  oidc {
+    issuer_uri = "https://token.actions.githubusercontent.com"
+  }
+
+  attribute_mapping = {
+    "google.subject"       = "assertion.sub"
+    "attribute.repository" = "assertion.repository"
+    "attribute.ref"        = "assertion.ref"
+  }
+
+  attribute_condition = "assertion.repository == \"${var.github_repository}\""
+}
+
+# Deployer SA — impersonated by GitHub Actions via WIF. Separate from the HCP
+# runner SA (権限分離). Roles limited to what a Cloud Run image swap needs.
+resource "google_service_account" "deployer" {
+  project      = var.gcp_project_id
+  account_id   = var.deployer_service_account_id
+  display_name = "GitHub Actions Cloud Run deployer"
+  description  = "Impersonated by GitHub Actions (backend-deploy workflow) via Workload Identity Federation"
+}
+
+resource "google_project_iam_member" "deployer_roles" {
+  for_each = toset(var.deployer_iam_roles)
+  project  = var.gcp_project_id
+  role     = each.value
+  member   = "serviceAccount:${google_service_account.deployer.email}"
+}
+
+# Only tokens from the configured GitHub repo may impersonate the deployer SA.
+resource "google_service_account_iam_member" "github_wif" {
+  service_account_id = google_service_account.deployer.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.hcp.name}/attribute.repository/${var.github_repository}"
+}

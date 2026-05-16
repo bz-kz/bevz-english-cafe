@@ -55,3 +55,30 @@ variable "allowed_workspaces" {
   ]
   description = "HCP workspace names allowed to impersonate the runner SA via WIF."
 }
+
+variable "github_provider_id" {
+  type        = string
+  default     = "github-actions"
+  description = "Workload Identity Pool Provider ID for GitHub Actions OIDC."
+}
+
+variable "github_repository" {
+  type        = string
+  description = "GitHub repo (owner/name) allowed to impersonate the deployer SA, e.g. bz-kz/bevz-english-cafe. No default — must be set explicitly."
+}
+
+variable "deployer_service_account_id" {
+  type        = string
+  default     = "github-actions-deployer"
+  description = "Account ID (no @domain) for the SA GitHub Actions impersonates via WIF to deploy Cloud Run."
+}
+
+variable "deployer_iam_roles" {
+  type = list(string)
+  default = [
+    "roles/run.admin",               # update the Cloud Run service
+    "roles/artifactregistry.writer", # push images
+    "roles/iam.serviceAccountUser",  # act as the Cloud Run runtime SA
+  ]
+  description = "Project-level IAM roles granted to the GitHub Actions deployer SA."
+}

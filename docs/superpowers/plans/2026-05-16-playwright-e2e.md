@@ -34,8 +34,14 @@ PR-1 implementation revealed the split's premise is invalid: `frontend/src/lib/f
    - NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST=localhost:9099
    - NEXT_PUBLIC_STRIPE_ENABLED=true
    ```
-   plus the backend C1 env (`GCP_PROJECT_ID` & `GOOGLE_CLOUD_PROJECT` = `demo-english-cafe`, `FIREBASE_AUTH_EMULATOR_HOST=firebase-auth-emulator:9099`). After this, re-run the **full PR-1 public suite** — it must now actually pass (previously 0 ran). This is the verification that the bootstrap fix works.
-4. Task 10 — globalSetup (clear→seed, timestampValue) + `playwright.config.ts` (`globalSetup`, projects testMatch; `webServer.env` optional duplicate for non-docker fallback).
+   plus the backend C1 env (`GCP_PROJECT_ID` & `GOOGLE_CLOUD_PROJECT` = `demo-english-cafe`, `FIREBASE_AUTH_EMULATOR_HOST=firebase-auth-emulator:9099`).
+   **MINOR-1 (mandatory verification step):** `docker compose up -d` re-applies env only on container (re)creation — a running container keeps the old (Firebase-less) env. After editing `docker-compose.yml` you MUST recreate the frontend (and backend) containers before re-testing:
+   ```bash
+   docker compose up -d --force-recreate --wait frontend backend firebase-auth-emulator
+   curl -s -o /dev/null -w '%{http_code}' http://localhost:3010/        # expect 200, NOT 500
+   ```
+   Only after `/` returns 200 (SSR no longer crashes), re-run the **full public suite** `cd frontend && npm run test:e2e -- --project=chromium` — it must now actually pass (previously 0 ran). A still-500 here almost always means the frontend container was not recreated, NOT a design defect — recreate and retry before concluding anything is wrong.
+4. Task 10 — globalSetup (clear→seed, timestampValue) + `playwright.config.ts` (`globalSetup`, projects testMatch). Do NOT rely on `webServer.env` — Playwright reuses the docker frontend so that path is non-functional without the docker stack; the docker-compose `frontend` env from step 3 is the only effective location.
 5. Task 11 — auth fixture (real UI login).
 6. Tasks 12–14 — mypage / booking / admin specs; Task 14 also updates README + CLAUDE.md, runs the FULL suite (public + authed), production-safety + scope assertions, then **cross-cutting-reviewer gate**, then **one** `gh pr create` for `feat/e2e` (title e.g. `feat(e2e): comprehensive Playwright suite + Firebase auth emulator`), no merge.
 

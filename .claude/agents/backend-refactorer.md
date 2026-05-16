@@ -7,10 +7,10 @@ model: opus
 
 ## Scope
 
-- Edit anything under `backend/` (app/, tests/, alembic/versions/, pyproject.toml).
-- Edit `.env.example` and `render.yaml` for backend-only env keys.
-- Run: `cd backend && uv run pytest`, `uv run ruff check --fix`, `uv run ruff format`, `uv run mypy app/domain app/services`, `uv run alembic revision --autogenerate -m "<slug>"`.
-- `git add backend/`, `git add .env.example`, `git add render.yaml`, `git diff`, `git status`.
+- Edit anything under `backend/` (app/, tests/, pyproject.toml).
+- Edit `.env.example` for backend-only env keys.
+- Run: `cd backend && uv run pytest`, `uv run ruff check --fix`, `uv run ruff format`, `uv run mypy app/domain app/services`.
+- `git add backend/`, `git add .env.example`, `git diff`, `git status`.
 
 ## Forbidden
 
@@ -41,5 +41,5 @@ For every change-spec, before returning:
 
 - The change-spec implies removing a public API method that has external callers.
 - Adding a new dependency to `pyproject.toml` (must go through `uv add`, dispatcher approves).
-- A migration needs `alembic downgrade` to recover (data-destructive).
+- A change requires a bulk Firestore document rewrite/delete to recover (data-destructive — Firestore has no transactional schema rollback).
 - A change crosses the DDD layer boundary (domain → infrastructure import) — refuse and ask.

@@ -248,29 +248,27 @@ git commit -m "test(e2e): contact form validation + submit + error"
 
 **Files:** Create `frontend/e2e/auth-pages.spec.ts`
 
-- [ ] **Step 1: Read the forms to get exact selectors**
+- [ ] **Step 1: Verified selectors (no read needed unless changed)**
 
-Run: `sed -n '1,80p' frontend/src/components/forms/LoginForm.tsx frontend/src/components/forms/SignupForm.tsx`
-Use the actual input names/ids and the client-side validation message text in the assertions below (replace the placeholders `LOGIN_*` with verified selectors; do NOT submit real credentials — assert only pre-submit client validation).
+`LoginForm.tsx` inputs have **no `id`/`name`** — only `type="email"` / `type="password"` with placeholders, marked HTML `required` (native validation, no zod). Submit calls `signInWithEmailAndPassword` then `router.push("/mypage")`. So `input[type="email"]` / `input[type="password"]` are valid selectors. Empty submit triggers native constraint validation (no network). If the form gained ids/zod since, re-grep and adjust.
 
-- [ ] **Step 2: Write the spec**
+- [ ] **Step 2: Write the spec** (assert native invalid state — not a racy request-poll)
 
 ```ts
 import { test, expect } from "@playwright/test";
 import { ROUTES } from "./helpers/selectors";
 
 test.describe("auth pages (render + client validation)", () => {
-  test("login renders and rejects empty/invalid before any network", async ({ page }) => {
-    let firebaseCalled = false;
-    page.on("request", (r) => { if (r.url().includes("identitytoolkit")) firebaseCalled = true; });
+  test("login renders; empty submit blocked by native validation (no network)", async ({ page }) => {
     await page.goto(ROUTES.login);
     await expect(page.locator("form")).toBeVisible();
     await page.locator('button[type="submit"]').click();
-    // client zod/HTML validation blocks submit -> no Firebase call
-    await expect.poll(() => firebaseCalled).toBe(false);
+    // required email stays invalid -> Firebase never called
+    await expect(page.locator('input[type="email"]')).toHaveJSProperty("validity.valid", false);
+    expect(page.url()).toContain("/login");
   });
 
-  test("signup renders with required fields", async ({ page }) => {
+  test("signup renders with required email + password fields", async ({ page }) => {
     await page.goto(ROUTES.signup);
     await expect(page.locator("form")).toBeVisible();
     await expect(page.locator('input[type="email"]').first()).toBeVisible();
@@ -343,25 +341,19 @@ git commit -m "test(e2e): public browse + dynamic detail + review submit render"
 
 **Files:** Create `frontend/e2e/book-unauth.spec.ts`
 
-- [ ] **Step 1: Determine the real unauth contract**
+- [ ] **Step 1: Confirm the unauth contract (verified)**
 
-Run: `sed -n '1,120p' frontend/src/app/book/page.tsx; ls frontend/src/app/book`
-Identify the ACTUAL unauthenticated behavior (renders slots then 401 on action? client redirect to `/login`? a guard hook?). Write the assertion to the OBSERVED contract — do not assume `/login`.
+`frontend/src/app/book/page.tsx:65-66` does `if (!user) router.push("/login")` — the page client-redirects unauthenticated users to `/login`. Re-confirm the line still holds: `grep -n "router.push(\"/login\")" frontend/src/app/book/page.tsx`. If the redirect target/line changed, assert the observed target instead.
 
-- [ ] **Step 2: Write the spec to the observed behavior**
-
-Template (fill the assertion per Step 1 — pick exactly one branch and delete the other; this is an observed-contract decision, not a placeholder):
+- [ ] **Step 2: Write the spec (Branch A — verified redirect)**
 
 ```ts
 import { test, expect } from "@playwright/test";
 import { ROUTES } from "./helpers/selectors";
 
-test("book page unauthenticated contract", async ({ page }) => {
-  const r = await page.goto(ROUTES.book);
-  expect(r?.status()).toBeLessThan(400);
-  // BRANCH A (guard redirects): await expect(page).toHaveURL(/\/login/);
-  // BRANCH B (renders then gated action): assert slot list visible AND that
-  //   triggering a booking shows the auth-required UI / redirects.
+test("book page redirects unauthenticated users to /login", async ({ page }) => {
+  await page.goto(ROUTES.book);
+  await expect(page).toHaveURL(/\/login/);
 });
 ```
 
@@ -532,7 +524,14 @@ Add a service (firebase-tools image) running the Auth emulator only:
       - ./.firebaserc:/app/.firebaserc:ro
     ports:
       - "9099:9099"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9099/"]
+      interval: 5s
+      timeout: 3s
+      retries: 30          # first boot does `npm i -g firebase-tools` (~60s) — generous retries
+      start_period: 90s
 ```
+The `healthcheck` makes `docker compose up -d --wait` block until the emulator is actually serving, so `globalSetup`'s fail-fast ping does not race the first-boot npm install.
 
 - [ ] **Step 3: Backend env (C1 — both project vars)**
 
@@ -549,12 +548,11 @@ Leave the existing `firestore-emulator` service definition (gcloud-cli, `--proje
 Run:
 ```bash
 docker compose config >/dev/null && echo "compose valid"
-docker compose up -d
-sleep 20
-curl -fs "http://localhost:9099/" >/dev/null 2>&1 && echo "auth emu up" || echo "auth emu starting"
+docker compose up -d --wait        # blocks on healthchecks incl. firebase-auth-emulator first boot
+curl -fs "http://localhost:9099/" >/dev/null 2>&1 && echo "auth emu up"
 curl -fs "http://localhost:8010/api/health" && echo " backend up"
 ```
-Expected: `compose valid`, backend health 2xx. (Auth emulator first boot installs firebase-tools — may take ~30–60s; re-poll until `http://localhost:9099/` responds.)
+Expected: `compose valid`, `auth emu up`, backend health 2xx. `--wait` + the service healthcheck absorb the firebase-tools npm-install latency (no `sleep` race). Always run `docker compose up -d --wait` and let it return BEFORE invoking `npm run test:e2e` (a stale reused dev server without the new `webServer.env` would also break — restart the frontend container if it predates Task 10's config).
 
 - [ ] **Step 5: Commit**
 
@@ -569,10 +567,16 @@ git commit -m "feat(e2e): firebase-auth-emulator service + demo project env (C1)
 
 **Files:** Create `frontend/e2e/global-setup.ts`; Modify `frontend/playwright.config.ts`
 
-- [ ] **Step 1: Confirm seeded user schema**
+- [ ] **Step 1: Confirm ALL seeded collection schemas (users + quota + slots)**
 
-Run: `grep -rn "class FirestoreUserRepository" -A40 backend/app/infrastructure/repositories/`
-Note the exact persisted field names for a `users/{uid}` doc (uid/email/plan/trial_used + any required). Use them verbatim in Step 2 seed.
+The seed must satisfy the backend READ path for every authed collection, including value TYPES (a string where the repo expects a Firestore timestamp silently breaks booking — looks like an app bug). Run:
+```bash
+grep -rn "_to_dict\|_from_dict\|def _to_entity\|to_firestore\|from_firestore" -A30 \
+  backend/app/infrastructure/repositories/ | grep -iE "user|quota|slot|booking" -A30
+grep -rni "monthly_quota\|lesson_slots\|start_at\|granted_at\|booked_count\|remaining" \
+  backend/app/infrastructure/repositories/ backend/app/domain/
+```
+Record, for `users/{uid}`, `monthly_quota/{uid}_{YYYY-MM}`, `lesson_slots/{id}`: exact field names AND each field's Firestore type — in particular whether `start_at` / `granted_at` / any date is read as a Firestore **timestamp** (→ must seed as `timestampValue`) vs an ISO **string** (→ `stringValue`), and whether numbers are int. (Verified baseline: `FirestoreUserRepository._to_dict` uses snake_case `uid/email/name/phone/plan/plan_started_at/trial_used`. Cross-check quota/slot likewise — do NOT assume.) Use the verified names/types verbatim in Step 2.
 
 - [ ] **Step 2: Write `frontend/e2e/global-setup.ts`**
 
@@ -608,10 +612,15 @@ async function setAdmin(localId: string) {
   });
 }
 
+// Wrap a value to force Firestore timestamp typing where the repo expects it.
+class Ts { constructor(public iso: string) {} }
+const ts = (iso: string) => new Ts(iso);
+
 async function fsSet(path: string, fields: Record<string, unknown>) {
-  // Firestore emulator REST: PATCH document with typed values
+  // Firestore emulator REST: PATCH document with typed values.
   const toVal = (v: unknown): unknown =>
-    typeof v === "boolean" ? { booleanValue: v }
+    v instanceof Ts ? { timestampValue: v.iso }
+    : typeof v === "boolean" ? { booleanValue: v }
     : typeof v === "number" ? { integerValue: String(v) }
     : { stringValue: String(v) };
   const body = { fields: Object.fromEntries(Object.entries(fields).map(([k, v]) => [k, toVal(v)])) };
@@ -631,11 +640,14 @@ export default async function globalSetup(_c: FullConfig) {
   const ym = new Date().toISOString().slice(0, 7); // YYYY-MM
   const startAt = new Date(Date.now() + 72 * 3600 * 1000).toISOString();
 
-  // NOTE: field names below MUST match FirestoreUserRepository (Task 10 Step 1)
+  // NOTE: field names + value types below MUST match the repositories confirmed
+  // in Task 10 Step 1. `ts(...)` forces Firestore timestampValue — apply it to
+  // every date field the repo reads as a timestamp (start_at/granted_at/etc.);
+  // if Step 1 shows a field is an ISO string, pass the raw string instead.
   await fsSet(`users/${userUid}`, { uid: userUid, email: "e2e-user@example.com", plan: "standard", trial_used: false });
   await fsSet(`users/${adminUid}`, { uid: adminUid, email: "e2e-admin@example.com", plan: "standard", trial_used: false });
-  await fsSet(`monthly_quota/${userUid}_${ym}`, { uid: userUid, remaining: 3, granted_at: startAt });
-  await fsSet(`lesson_slots/e2e-slot-1`, { status: "open", capacity: 5, booked_count: 0, start_at: startAt });
+  await fsSet(`monthly_quota/${userUid}_${ym}`, { uid: userUid, remaining: 3, granted_at: ts(startAt) });
+  await fsSet(`lesson_slots/e2e-slot-1`, { status: "open", capacity: 5, booked_count: 0, start_at: ts(startAt) });
 
   process.env.E2E_USER_EMAIL = "e2e-user@example.com";
   process.env.E2E_ADMIN_EMAIL = "e2e-admin@example.com";
@@ -693,12 +705,16 @@ git commit -m "feat(e2e): globalSetup clear+seed emulators; config projects/env"
 
 **Files:** Create `frontend/e2e/helpers/auth.ts`
 
-- [ ] **Step 1: Inspect LoginForm selectors**
+- [ ] **Step 1: Confirm the authed-settled signal (REQUIRED — not optional)**
 
-Run: `sed -n '1,80p' frontend/src/components/forms/LoginForm.tsx`
-Note the email/password input selectors + submit button + the post-login authed indicator (e.g. a `/mypage` element or a header avatar). Also check `frontend/src/stores/authStore.ts` for an observable authed signal.
+Verified: `LoginForm` submits `signInWithEmailAndPassword` then `router.push("/mypage")`; inputs are `input[type="email"]`/`input[type="password"]`. But `waitForURL('**/mypage')` alone is **insufficient** — the push fires before `onAuthStateChanged` hydrates `authStore`, and `useAdminGuard` keys off store `loading`; navigating an admin spec too early causes a spurious redirect to `/`. So the fixture MUST also wait for an authed-settled signal. Run:
+```bash
+sed -n '1,60p' frontend/src/stores/authStore.ts
+grep -rn "useAdminGuard\|loading\|isAdmin" frontend/src/stores/authStore.ts frontend/src/app/mypage/page.tsx
+```
+Identify a concrete settled signal: a `/mypage`-only element that renders ONLY after `authStore.loading===false && user!==null` (e.g. the profile section / a logout control), OR expose `window.__E2E_AUTH_READY` is NOT allowed (no app-code hack — C2). Pick the DOM element.
 
-- [ ] **Step 2: Write the fixture**
+- [ ] **Step 2: Write the fixture** (wait for `/mypage` URL **and** the settled DOM signal)
 
 ```ts
 import { test as base, expect, Page } from "@playwright/test";
@@ -708,9 +724,11 @@ async function uiLogin(page: Page, email: string) {
   await page.fill('input[type="email"]', email);
   await page.fill('input[type="password"]', process.env.E2E_PASSWORD!);
   await page.locator('button[type="submit"]').click();
-  // I1: wait until auth state established before any guarded navigation
-  await page.waitForURL((u) => !u.pathname.startsWith("/login"), { timeout: 15000 });
-  await expect(page.locator("body")).toBeVisible();
+  // I1: LoginForm router.push('/mypage') after signIn; then REQUIRE the
+  // authed-settled DOM signal from Step 1 (authStore loading=false & user!=null)
+  // before any guarded navigation — NOT just the URL, NOT a sleep.
+  await page.waitForURL("**/mypage", { timeout: 15000 });
+  await expect(page.locator(/* Step 1 settled-signal selector */ "main")).toBeVisible();
 }
 
 export const test = base.extend<{ asUser: Page; asAdmin: Page }>({
@@ -719,7 +737,7 @@ export const test = base.extend<{ asUser: Page; asAdmin: Page }>({
 });
 export { expect };
 ```
-(If Step 1 shows the post-login redirect target or a more reliable authed signal, replace the `waitForURL` predicate with that concrete signal — must wait for `authStore` settled, not a fixed sleep.)
+Replace the `"main"` placeholder with the Step 1 settled-signal selector — this replacement is REQUIRED (the generic `main` is insufficient for admin specs; do not ship the literal `"main"`).
 
 - [ ] **Step 3: Commit**
 
@@ -734,7 +752,11 @@ git commit -m "test(e2e): real-UI-login auth fixture (asUser/asAdmin)"
 
 **Files:** Create `frontend/e2e/mypage.spec.ts`
 
-- [ ] **Step 1: Write the spec**
+- [ ] **Step 1: Confirm plan-select selector (verified — no `data-plan`)**
+
+Verified: `PlanCard` renders a button with Japanese text `選択` for a selectable (non-current) plan and `ご利用中` for the current plan; there is **no** `data-plan` attribute and **no** English plan name on the button. The seeded user is `plan:"standard"`, so target a *different* plan's `選択` button (e.g. an upgrade tier). Re-confirm: `grep -n "選択\|ご利用中\|data-plan\|onSelect" frontend/src/components/**/PlanCard*.tsx frontend/src/app/mypage/plan/*.tsx`. Use `button:has-text("選択")` (first selectable), not the generic selector.
+
+- [ ] **Step 2: Write the spec**
 
 ```ts
 import { test, expect } from "./helpers/auth";
@@ -764,15 +786,15 @@ test.describe("mypage (authed)", () => {
     });
     await asUser.route("https://checkout.stripe.com/**", (r) => { stripeAborted = true; r.abort(); });
     await asUser.goto(ROUTES.mypagePlan);
-    await asUser.locator('button:has-text("standard"), [data-plan]').first().click();
+    await asUser.locator('button:has-text("選択")').first().click();
     await expect.poll(() => checkoutHit).toBe(true);
     await expect.poll(() => stripeAborted).toBe(true);
   });
 });
 ```
-(Adjust the plan-select selector in the last test per the actual `PlanPageClient.tsx` markup — read it if the generic selector misses.)
+(`button:has-text("選択")` = a selectable non-current plan, verified in Step 1; current plan shows `ご利用中`. If Step 1's grep shows different markup, use the verified selector.)
 
-- [ ] **Step 2: Run + commit**
+- [ ] **Step 3: Run + commit**
 
 Run: `cd frontend && npm run test:e2e -- --project=authed mypage.spec.ts` → PASS.
 ```bash

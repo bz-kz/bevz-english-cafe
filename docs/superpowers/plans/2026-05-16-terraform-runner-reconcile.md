@@ -226,7 +226,7 @@ Expected: `superset OK: roles 7->14, ws 3->4`.
 - [ ] **Step 3: Push + PR (no merge)**
 
 ```bash
-git push -u origin <branch>
+git push -u origin feat/terraform-runner-reconcile
 gh pr create --title "feat(wif): reconcile runner SA IAM to declared state (sub-project B)" --body "$(cat <<'EOF'
 ## Summary
 Reconcile `terraform/modules/gcp-wif/variables.tf` defaults to the IAM actually granted to the HCP runner SA (discovered via `gcloud get-iam-policy` dumps, 2026-05-16): `runner_iam_roles` 7→14, `allowed_workspaces` 3→4 (+`scheduler-slots`). Document billing/monthly-quota WIF non-coverage in `terraform/README.md`.

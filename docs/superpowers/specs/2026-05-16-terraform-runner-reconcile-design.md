@@ -89,7 +89,7 @@ variable "allowed_workspaces" {
     "english-cafe-prod-cloudrun",
     "english-cafe-prod-scheduler-slots", # reconciled — imperative grant declared
   ]
-  description = "HCP workspace names allowed to impersonate the runner SA via WIF. Reconciled to actual 2026-05-16. NOTE: monthly-quota / billing are NOT here — they are not applied via HCP runner WIF (see terraform/README.md)."
+  description = "HCP workspace names allowed to impersonate the runner SA via WIF. Reconciled to actual 2026-05-16. NOTE: monthly-quota / billing are NOT here — they are not applied via HCP runner WIF (see terraform/README.md WIF coverage exceptions)."
 }
 ```
 

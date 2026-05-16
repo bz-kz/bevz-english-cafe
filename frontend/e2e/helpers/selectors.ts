@@ -1,0 +1,30 @@
+export const ROUTES = {
+  home: '/',
+  contact: '/contact',
+  lessons: '/lessons',
+  instructors: '/instructors',
+  reviews: '/reviews',
+  reviewsSubmit: '/reviews/submit',
+  videos: '/videos',
+  login: '/login',
+  signup: '/signup',
+  book: '/book',
+  debug: '/debug',
+  mypage: '/mypage',
+  mypageEdit: '/mypage/edit',
+  mypagePlan: '/mypage/plan',
+  adminLessons: '/admin/lessons',
+} as const;
+
+export const CONTACT = {
+  name: '#name',
+  email: '#email',
+  phone: '#phone',
+  lessonType: '#lessonType',
+  message: '#message',
+  preferredContact: 'input[name="preferredContact"]',
+  submit: 'button[type="submit"]',
+  fieldError: 'p.text-sm.text-red-600',
+  submitErrorHeading: 'text=送信エラー',
+  successToast: 'text=送信完了',
+} as const;

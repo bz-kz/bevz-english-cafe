@@ -24,7 +24,7 @@
 | Auth approach | **1**: Firebase Auth エミュレータをローカル専用に配線（`firebase.ts` を env フラグ gated に。フラグ未設定＝本番と完全同一挙動・無影響）。本番 Firebase / storageState 案は不採用 |
 | Delivery | **2 PR 分割**（各マージなし・PR 作成まで）。PR-1 公開、PR-2 認証基盤+認証 e2e |
 | Stripe | PR-2 で e2e 時のみ `NEXT_PUBLIC_STRIPE_ENABLED=true`。**境界はリクエスト傍受で判定**: `page.route('**/api/v1/billing/checkout', fulfill {url:"https://checkout.stripe.com/test"})` で stub を返す **かつ** `page.route('https://checkout.stripe.com/**', abort)` で off-site 遷移を握り潰す。assertion は「checkout リクエストが発火したこと」「checkout.stripe.com への遷移が abort されたこと」で行う（`window.location` ポーリングは遷移と競合するため不可） |
-| **Project ID 統一 (C1)** | e2e スタックは単一 project id **`demo-english-cafe`** で統一。(1) frontend e2e env `NEXT_PUBLIC_FIREBASE_PROJECT_ID=demo-english-cafe`、(2) Auth emulator `--project demo-english-cafe`、(3) backend は **`GOOGLE_CLOUD_PROJECT=demo-english-cafe`**（Admin SDK は `GCP_PROJECT_ID` を読まない。`verify_id_token` の aud/iss 検証 = この値）。Firestore emulator のサービス定義(`--project=english-cafe-dev`)は不変だが、emulator は client 指定 project でデータを分割するため backend の Firestore AsyncClient も `GOOGLE_CLOUD_PROJECT=demo-english-cafe` で読む → seed も同 project。三者一致しないと全認証 spec が 401 |
+| **Project ID 統一 (C1)** | e2e スタックは単一 project id **`demo-english-cafe`** で統一。(1) frontend e2e env `NEXT_PUBLIC_FIREBASE_PROJECT_ID=demo-english-cafe`、(2) Auth emulator `--project demo-english-cafe`、(3) backend は **2 つの env を両方** `demo-english-cafe` に: **`GOOGLE_CLOUD_PROJECT`**（firebase-admin の `verify_id_token` aud/iss 検証 = これ。`GCP_PROJECT_ID` は Admin SDK 非対応）**かつ `GCP_PROJECT_ID`**（Firestore AsyncClient は `firestore_client.py:24` で `project=settings.gcp_project_id` を使い、`config.py:42` が env `GCP_PROJECT_ID` から束縛。`GOOGLE_CLOUD_PROJECT` は読まない）。両方揃って初めて「トークン検証 project」と「Firestore 読み書き namespace」と「seed namespace」が一致。片方欠落 = 認証は通るが `GET users/me` が別 namespace を見て 404（認証 spec 全 fail）|
 | **Auth fixture 方式 (C2)** | storageState 不採用に加え `page.evaluate` での app `firebaseAuth` 再利用も不採用（module-scope export で page realm から到達不可）。**実 UI ログイン**（`/login` フォーム入力→submit、アプリ自身の emulator 配線済インスタンスを行使）を fixture の機構とする |
 | CI | e2e の CI 統合は本スコープ外（既存 CI #20 は backend のみ）。ローカル/手動実行前提。将来課題として README + CLAUDE.md に明記 |
 
@@ -71,7 +71,11 @@ e2e 用 env を `playwright.config.ts` の `webServer.env`（専用 `npm run dev
 - `NEXT_PUBLIC_FIREBASE_PROJECT_ID=demo-english-cafe`（**C1**: トークンの aud/iss をこの project に固定。本番 `.env.local` の実 project を上書きするのは e2e プロセス env のみ）
 - `NEXT_PUBLIC_FIREBASE_API_KEY` / `AUTH_DOMAIN` は emulator では任意値で可（`connectAuthEmulator` 接続時 API key 検証なし）が、`firebase.ts` の非 null assertion を満たすためダミー値を e2e env に設定。
 
-backend(docker-compose) 側 env（**C1**）: `GOOGLE_CLOUD_PROJECT=demo-english-cafe` を追加（Admin SDK の `verify_id_token` project 解決 = これ。`GCP_PROJECT_ID` は Admin SDK 非対応のため不可）。Firestore AsyncClient も同 env を resolve するので Firestore emulator(8080, サービス定義不変)上のデータは `demo-english-cafe` namespace に入り、seed/read/トークン検証の三者が一致。本番 `.env`/Vercel env は一切不変。
+backend(docker-compose)側 env（**C1 — 2 変数を両方 `demo-english-cafe` に**）:
+- `GOOGLE_CLOUD_PROJECT=demo-english-cafe` を追加 — firebase-admin の `verify_id_token` の project 解決（`GCP_PROJECT_ID` は Admin SDK 非対応のため不可）。
+- `GCP_PROJECT_ID=demo-english-cafe` に変更（現状 `english-cafe-dev`）— Firestore AsyncClient は `firestore_client.py:24` の `firestore.AsyncClient(project=settings.gcp_project_id)` で project を取り、`config.py:42` が env `GCP_PROJECT_ID` から束縛する（`GOOGLE_CLOUD_PROJECT` は参照しない）。これを切替えないと backend は `english-cafe-dev` namespace を読み、`demo-english-cafe` に seed した user/quota/slot が 404 で不可視＝認証は通るが data 層で全 fail。
+
+Firestore emulator のサービス定義（gcloud-cli, `--project=english-cafe-dev` フラグ, 8080）は**不変で可**（emulator は client 指定 project でデータを分割するため、backend の `GCP_PROJECT_ID` 切替と seed REST の project 指定が `demo-english-cafe` なら整合する）。これでトークン検証 / Firestore 読み書き / seed の三者が `demo-english-cafe` で一致。本番 `.env`/Vercel env は一切不変。
 
 **(d) Playwright `globalSetup`（seed — 順序・冪等・schema 整合）**
 `frontend/e2e/global-setup.ts` を `playwright.config.ts` に登録。credential 不要な **エミュレータ REST**。すべて project=`demo-english-cafe`:
@@ -132,7 +136,7 @@ storageState（IndexedDB 非捕捉）も `page.evaluate` での app `firebaseAut
 
 ### PR-2（Auth emulator 配線 + 認証 e2e）
 - 変更: `frontend/src/lib/firebase.ts`（gated `connectAuthEmulator` のみ＝唯一の `frontend/src/` 変更）
-- 変更: `docker-compose.yml`（firebase-auth-emulator サービス追加(9099)、backend env に `FIREBASE_AUTH_EMULATOR_HOST=firebase-auth-emulator:9099` **と** `GOOGLE_CLOUD_PROJECT=demo-english-cafe`（**C1**）。既存 Firestore emulator サービス定義は不変）
+- 変更: `docker-compose.yml`（firebase-auth-emulator サービス追加(9099)、backend env に `FIREBASE_AUTH_EMULATOR_HOST=firebase-auth-emulator:9099`・`GOOGLE_CLOUD_PROJECT=demo-english-cafe`（新規追加）・`GCP_PROJECT_ID=demo-english-cafe`（`english-cafe-dev` から変更）の 3 点（**C1**: token 検証は `GOOGLE_CLOUD_PROJECT`、Firestore client は `GCP_PROJECT_ID` を見るため両方必須）。既存 Firestore emulator サービス定義は不変）
 - 新規: `firebase.json`, `.firebaserc`（auth emulator 最小・project `demo-english-cafe`）
 - 変更: `frontend/playwright.config.ts`（`globalSetup`、`webServer.env` に e2e フラグ群〔§PR-2 c〕、`projects` を `testMatch` で公開全ブラウザ/authed Chromium-only に分離〔**M3**〕）
 - 新規: `frontend/e2e/global-setup.ts`, `frontend/e2e/helpers/auth.ts`
@@ -144,7 +148,7 @@ PR-2 は **PR-1 マージ後の baseline** を前提（PR-1 が `example.spec.ts
 
 ### 明示的に不変
 - `backend/app/`・`shared/`・terraform module/stack・本番 `.env`/Vercel env・本番 Firebase project
-- 既存 Firestore emulator サービス定義（gcloud-cli 8080, `--project=english-cafe-dev` のまま — emulator は client 指定 project でデータ分割するため backend の `GOOGLE_CLOUD_PROJECT` 切替だけで整合）
+- 既存 Firestore emulator サービス定義（gcloud-cli 8080, `--project=english-cafe-dev` フラグのまま — emulator は client 指定 project でデータ分割するため、backend の **`GCP_PROJECT_ID` 切替**（Firestore client）+ `GOOGLE_CLOUD_PROJECT` 追加（token 検証）+ seed REST の project 指定がいずれも `demo-english-cafe` であれば整合。emulator サービス定義自体の変更は不要）
 
 ## Out of scope
 

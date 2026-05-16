@@ -61,6 +61,8 @@ In the HCP Terraform UI (https://app.terraform.io/app/example-org-e62762/workspa
 | `english-cafe-prod-firestore` | CLI-driven | Remote |
 | `english-cafe-prod-cloudrun` | CLI-driven | Remote |
 
+> **Scope note**: these three are the original Cloud Run bootstrap core. The repo has since added more HCP workspaces/stacks (`billing`, `monthly-quota`, `scheduler-slots`, `vercel`); see `terraform/README.md` for the full stack inventory and apply order.
+
 > **Why `wif` is Local, not Remote**: the wif stack creates the Workload Identity Pool itself, so it cannot use WIF dynamic credentials for its own first apply. HCP's Remote runners have no ADC. Setting wif workspace's execution mode to Local makes terragrunt invoke terraform on your laptop (which has gcloud ADC) while state still lives in HCP. After bootstrap, the wif workspace stays Local — re-applies are rare and operationally fine to run from a laptop.
 
 ---
@@ -78,13 +80,20 @@ terragrunt init
 terragrunt apply
 ```
 
-Confirm `yes` when prompted. Expected creates:
+Confirm `yes` when prompted. Expected creates (the `*_iam_member` counts
+derive from the `runner_iam_roles` / `allowed_workspaces` / `deployer_iam_roles`
+lists in `terraform/modules/gcp-wif/variables.tf`, so they grow as stacks are
+added — do not treat the numbers as fixed):
 
 - `google_iam_workload_identity_pool.hcp`
-- `google_iam_workload_identity_pool_provider.hcp`
+- `google_iam_workload_identity_pool_provider.hcp` (HCP Terraform OIDC)
+- `google_iam_workload_identity_pool_provider.github` (GitHub Actions OIDC — PR #20)
 - `google_service_account.runner`
-- `google_project_iam_member.runner_roles` (×7)
-- `google_service_account_iam_member.wif_runner` (×3)
+- `google_service_account.deployer` (CI/CD deployer SA — PR #20)
+- `google_project_iam_member.runner_roles` — one per `runner_iam_roles` entry (currently 14)
+- `google_project_iam_member.deployer_roles` — one per `deployer_iam_roles` entry
+- `google_service_account_iam_member.wif_runner` — one per `allowed_workspaces` entry (currently 4)
+- `google_service_account_iam_member.github_wif` (GitHub repo → deployer SA)
 
 After apply, capture the outputs:
 
@@ -383,7 +392,7 @@ End-to-end:
 
 - ~~Render service can be deleted~~ — already removed; `render.yaml` is gone from the repo.
 - ~~Phase D (SQLAlchemy / Alembic / Postgres dead-code removal)~~ — completed in commit `5913c50`. The SQLAlchemy compatibility shim no longer exists, so the rollback row for "Step 9" below is historical only.
-- Set up CI/CD so backend changes auto-build images and update `image` on the Cloud Run service (not yet done — see "Phase E" / GitHub Actions WIF auto-deploy notes elsewhere).
+- ~~Set up CI/CD so backend changes auto-build images and update `image` on the Cloud Run service~~ — done: `.github/workflows/backend-deploy.yml` (PR #20) runs the CI gate then `gcloud run services update --image` via GitHub Actions WIF. See CLAUDE.md "Deployment".
 
 ---
 

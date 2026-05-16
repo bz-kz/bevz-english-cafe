@@ -83,7 +83,7 @@ billing-account admin. This is an intentional, documented exception.
 
 The `wif` stack provisions both the Workload Identity Pool **and** the runner SA that the other two stacks impersonate via WIF — no manual SA creation is required.
 
-1. **Create three HCP workspaces** manually: `english-cafe-prod-wif`, `english-cafe-prod-firestore`, `english-cafe-prod-cloudrun` (CLI-driven workflow, agent type: remote).
+1. **Create three HCP workspaces** manually: `english-cafe-prod-wif`, `english-cafe-prod-firestore`, `english-cafe-prod-cloudrun` (CLI-driven workflow, agent type: remote). These three are the Cloud Run bootstrap core; the repo also has `billing`, `monthly-quota`, `scheduler-slots`, and `vercel` stacks (each its own `terraform/envs/prod/<stack>/terragrunt.hcl`).
 2. **`wif` stack first** — bootstrap with human credentials:
    ```bash
    gcloud auth application-default login   # one-time

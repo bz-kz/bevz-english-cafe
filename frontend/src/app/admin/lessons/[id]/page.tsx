@@ -7,6 +7,7 @@ import {
   adminDeleteSlot,
   adminUpdateSlot,
   type LessonSlot,
+  type AdminBookingRow,
 } from '@/lib/booking';
 import { firebaseAuth } from '@/lib/firebase';
 import { useNotificationStore } from '@/stores/notificationStore';
@@ -14,16 +15,6 @@ import { AddBookingDialog } from './_components/AddBookingDialog';
 import { ForceCancelDialog } from './_components/ForceCancelDialog';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8010';
-
-interface AdminBookingRow {
-  id: string;
-  user_id: string;
-  user_name: string | null;
-  user_email: string | null;
-  status: string;
-  created_at: string;
-  cancelled_at: string | null;
-}
 
 export default function AdminLessonEditPage() {
   const params = useParams<{ id: string }>();

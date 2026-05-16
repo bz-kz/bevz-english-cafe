@@ -145,6 +145,26 @@ export async function adminDeleteSlot(
   );
 }
 
+export interface AdminBookingRow {
+  id: string;
+  user_id: string;
+  user_name: string | null;
+  user_email: string | null;
+  status: string;
+  created_at: string;
+  cancelled_at: string | null;
+}
+
+export async function adminListSlotBookings(
+  slotId: string
+): Promise<AdminBookingRow[]> {
+  const resp = await axios.get<AdminBookingRow[]>(
+    `${API_BASE}/api/v1/admin/lesson-slots/${slotId}/bookings`,
+    { headers: await authHeaders() }
+  );
+  return resp.data;
+}
+
 // --- User / quota ---
 
 export type Plan = 'light' | 'standard' | 'intensive';

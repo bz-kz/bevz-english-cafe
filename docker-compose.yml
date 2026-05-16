@@ -47,11 +47,14 @@ services:
       - ENVIRONMENT=development
       - CORS_ORIGINS=http://localhost:3010
     depends_on:
-      - firestore-emulator
+      firestore-emulator:
+        condition: service_started
+      firebase-auth-emulator:
+        condition: service_healthy
 
   firestore-emulator:
     image: gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators
-    command: ["gcloud", "emulators", "firestore", "start", "--host-port=0.0.0.0:8080", "--project=english-cafe-dev"]
+    command: ["gcloud", "emulators", "firestore", "start", "--host-port=0.0.0.0:8080", "--project=demo-english-cafe"]
     ports:
       - "8080:8080"
 

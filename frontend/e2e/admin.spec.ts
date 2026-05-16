@@ -18,12 +18,12 @@ test.describe('admin gating', () => {
     });
     expect(asAdmin.url()).toContain('/admin/lessons');
 
-    // The seeded open slot renders an edit link a[href^="/admin/lessons/"].
+    // The seeded open slot always renders an edit link after a fresh
+    // globalSetup; assert it exists (catch seed regressions, no silent skip).
     const row = asAdmin.locator('a[href^="/admin/lessons/"]').first();
-    if (await row.count()) {
-      await row.click();
-      await expect(asAdmin).toHaveURL(/\/admin\/lessons\/.+/);
-      await expect(asAdmin.locator('main').first()).toBeVisible();
-    }
+    await expect(row).toBeVisible();
+    await row.click();
+    await expect(asAdmin).toHaveURL(/\/admin\/lessons\/.+/);
+    await expect(asAdmin.locator('main').first()).toBeVisible();
   });
 });

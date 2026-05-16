@@ -14,7 +14,7 @@ model: opus
 
 ## Forbidden
 
-- Editing `backend/`, `terraform/`, `.claude/`, `.github/`, `render.yaml`, `vercel.json`, `docker-compose.yml`.
+- Editing `backend/`, `terraform/`, `.claude/`, `.github/`, `vercel.json`, `docker-compose.yml`.
 - `git commit`, `git push`, `git tag`, `git reset --hard`, `git restore --staged`, `rm -rf`.
 - Removing or renaming Japanese comments and labels — match surrounding language.
 - Reading `frontend/.env.local`.

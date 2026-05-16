@@ -112,7 +112,6 @@ Three plan tiers (`light` / `standard` / `intensive`). Lesson credits live in th
 - **Python**: ruff (`target-version = py312`, line-length 88, double-quote). Don't add Black/isort/flake8 — ruff covers all of it.
 - **TypeScript**: ESLint (next config) + Prettier with `prettier-plugin-tailwindcss`. lint-staged + husky run on commit.
 - **Comments and docstrings** in the existing code are in Japanese. Match the surrounding language when editing; don't translate existing Japanese to English unless asked.
-- **Migrations**: filenames may contain Japanese (`75cadcbcfeb8_変更内容の説明.py`). Don't rename old ones; new migrations can use English slugs.
 
 ## Deployment
 
